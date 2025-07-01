@@ -1,0 +1,178 @@
+﻿<!--<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Google Map</title>
+    <style>
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap"async defer></script>
+
+
+    <script src="js/initMap.js"></script>
+</body>
+</html>-->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Карта голосования</title>
+    <meta charset="utf-8" />
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        .vote-popup {
+            font-size: 14px;
+        }
+
+        .vote-btn {
+            margin-top: 5px;
+            display: block;
+            padding: 4px;
+            background-color: #4285F4;
+            color: white;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <script>
+        let voteState = {
+            currentVote: null,
+            routeLine: null
+        };
+
+        let map;
+        let cities;
+        let cityMarkers = {};
+
+        function initMap() {
+            cities = [
+                { name: "Berlin", position: { lat: 52.52, lng: 13.405 }, votes: 0 },
+                { name: "Leipzig", position: { lat: 51.3397, lng: 12.3731 }, votes: 0 },
+                { name: "Dresden", position: { lat: 51.0504, lng: 13.7373 }, votes: 0 }
+            ];
+
+            map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 7,
+                center: cities[0].position
+            });
+
+            cities.forEach(city => {
+                const marker = new google.maps.Marker({
+                    position: city.position,
+                    map: map,
+                    title: city.name
+                });
+
+                const info = new google.maps.InfoWindow();
+                city.info = info;
+                city.marker = marker;
+
+                updateInfoWindow(city);
+
+                marker.addListener("click", () => {
+                    info.open(map, marker);
+                });
+
+                cityMarkers[city.name] = city;
+            });
+        }
+
+        function updateInfoWindow(city) {
+            const content = `
+                    <div class="vote-popup">
+                        <strong>${city.name}</strong><br />
+                        <span>Голосов: ${city.votes}</span><br />
+                        <div class="vote-btn" onclick="registerVote('${city.name}')">Голосовать</div>
+                    </div>
+                `;
+            city.info.setContent(content);
+        }
+
+        function registerVote(cityName) {
+            voteState.currentVote = cityName;
+            const userId = "user123"; // потом Telegram WebApp SDK
+
+            fetch('/api/vote', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ city: cityName, userId: userId })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    alert(`Голос за ${data.voted} принят сервером`);
+
+                    // Обновим количество голосов локально
+                    const votedCity = cityMarkers[cityName];
+                    if (votedCity) {
+                        votedCity.votes++;
+                        updateInfoWindow(votedCity);
+                    }
+
+                    // Отобразим победителя
+                    if (data.winner && cityMarkers[data.winner]) {
+                        Object.values(cityMarkers).forEach(c => {
+                            c.marker.setLabel(null);
+                        });
+
+                        cityMarkers[data.winner].marker.setLabel({
+                            text: "🏆",
+                            color: "blue",
+                            fontWeight: "bold"
+                        });
+                    }
+
+                    // Нарисуем маршрут от Берлина до выбранного города
+                    drawLineTo(cityMarkers[cityName].position);
+                })
+                .catch(err => {
+                    alert("Ошибка отправки голоса");
+                    console.error(err);
+                });
+        }
+
+        function drawLineTo(destination) {
+            if (voteState.routeLine) voteState.routeLine.setMap(null);
+            const berlin = { lat: 52.52, lng: 13.405 };
+            voteState.routeLine = new google.maps.Polyline({
+                path: [berlin, destination],
+                geodesic: true,
+                strokeColor: "#FF0000",
+                strokeOpacity: 1.0,
+                strokeWeight: 3
+            });
+            voteState.routeLine.setMap(map);
+        }
+    </script>
+
+    <!-- Вставь сюда свой реальный Google Maps API ключ -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap" async defer></script>
+</body>
+</html>
+
+
+
+
+
+
+
