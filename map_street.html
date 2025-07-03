@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>TonRoad Map + Street View</title>
+  <meta charset="utf-8" />
+  <style>
+    html, body { margin:0; padding:0; height:100%; }
+    #map { height:50%; width:100%; }
+    #street-view { height:50%; width:100%; }
+    .vote-btn {
+      margin-top:5px;
+      display:block;
+      padding:4px;
+      background-color:#4285F4;
+      color:white;
+      text-align:center;
+      cursor:pointer;
+      border-radius:4px;
+    }
+  </style>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="street-view"></div>
+
+<script>
+let map, streetView, voteState = { currentVote:null, routeLine:null }, cityMarkers={};
+
+function initMap() {
+  const cities = [
+    { name:"Berlin", position:{lat:52.52, lng:13.405}, votes:0 },
+    { name:"Leipzig", position:{lat:51.3397, lng:12.3731}, votes:0 },
+    { name:"Dresden", position:{lat:51.0504, lng:13.7373}, votes:0 }
+  ];
+
+  map = new google.maps.Map(document.getElementById("map"), {
+    center:cities[0].position,
+    zoom:7
+  });
+
+  streetView = new google.maps.StreetViewPanorama(document.getElementById("street-view"), {
+    position:cities[0].position,
+    pov:{heading:0, pitch:0},
+    visible:true
+  });
+
+  map.setStreetView(streetView);
+
+  cities.forEach(city => {
+    const marker = new google.maps.Marker({
+      position: city.position,
+      map: map,
+      title: city.name
+    });
+
+    const info = new google.maps.InfoWindow({
+      content: `
+        <strong>${city.name}</strong><br>
+        Голосов: ${city.votes}<br>
+        <div class="vote-btn" onclick="registerVote('${city.name}')">Голосовать</div>
+      `
+    });
+
+    marker.addListener("click", () => {
+      info.open(map, marker);
+      streetView.setPosition(city.position);
+      streetView.setPov({heading:0, pitch:0});
+    });
+
+    cityMarkers[city.name] = { ...city, marker, info };
+  });
+}
+
+function registerVote(cityName) {
+  voteState.currentVote = cityName;
+  const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || "unknown";
+
+  fetch('/api/vote', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ city: cityName, userId: userId })
+  })
+  .then(res => res.json())
+  .then(data => {
+    alert(`Голос за ${data.voted} принят`);
+
+    const votedCity = cityMarkers[cityName];
+    if (votedCity) {
+      votedCity.votes++;
+      votedCity.info.setContent(`
+        <strong>${votedCity.name}</strong><br>
+        Голосов: ${votedCity.votes}<br>
+        <div class="vote-btn" onclick="registerVote('${votedCity.name}')">Голосовать</div>
+      `);
+    }
+
+    drawLineTo(votedCity.position);
+    streetView.setPosition(votedCity.position);
+    streetView.setPov({heading:0, pitch:0});
+  })
+  .catch(console.error);
+}
+
+function drawLineTo(destination) {
+  if(voteState.routeLine) voteState.routeLine.setMap(null);
+  voteState.routeLine = new google.maps.Polyline({
+    path:[{lat:52.52, lng:13.405}, destination],
+    geodesic:true,
+    strokeColor:"#FF0000",
+    strokeOpacity:1.0,
+    strokeWeight:3,
+    map:map
+  });
+}
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap" async defer></script>
+</body>
+</html>
