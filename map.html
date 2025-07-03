@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
     <title>TonRoad Map</title>
@@ -26,6 +26,20 @@
             cursor: pointer;
             border-radius: 4px;
         }
+
+        /* стиль для кнопки перехода */
+        #streetBtn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 999;
+            padding: 8px 14px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
     </style>
     <!-- Telegram MiniApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -36,11 +50,7 @@
                 tg.ready();
                 console.log("Telegram WebApp SDK initialized");
 
-                // читаем Telegram user_id
                 const initDataUnsafe = tg.initDataUnsafe;
-                console.log("initData", initDataUnsafe);
-
-                // если нужно - можем вставить в переменную
                 window.telegramUserId = initDataUnsafe?.user?.id || "unknown";
                 console.log("User ID:", window.telegramUserId);
 
@@ -51,9 +61,16 @@
     </script>
 </head>
 <body>
+    <!-- кнопка для перехода -->
+    <button id="streetBtn">Перейти в Street View</button>
+
     <div id="map"></div>
 
     <script>
+        document.getElementById("streetBtn").addEventListener("click", () => {
+            window.location.href = "map_street.html";
+        });
+
         let voteState = {
             currentVote: null,
             routeLine: null
@@ -121,19 +138,16 @@
                 .then(data => {
                     alert(`Голос за ${data.voted} принят сервером`);
 
-                    // обновляем локально
                     const votedCity = cityMarkers[cityName];
                     if (votedCity) {
                         votedCity.votes++;
                         updateInfoWindow(votedCity);
                     }
 
-                    // если есть победитель
                     if (data.winner && cityMarkers[data.winner]) {
                         Object.values(cityMarkers).forEach(c => {
                             c.marker.setLabel(null);
                         });
-
                         cityMarkers[data.winner].marker.setLabel({
                             text: "🏆",
                             color: "blue",
@@ -141,7 +155,6 @@
                         });
                     }
 
-                    // рисуем линию
                     drawLineTo(cityMarkers[cityName].position);
                 })
                 .catch(err => {
@@ -169,6 +182,7 @@
     </script>
 </body>
 </html>
+
 
 
 
