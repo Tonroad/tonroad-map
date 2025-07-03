@@ -1,9 +1,17 @@
 {
-  "rewrites": [
+  "headers": [
     {
-      "source": "/",
-      "destination": "/map.html"
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; frame-ancestors *;"
+        }
+      ]
     }
   ]
 }
-
