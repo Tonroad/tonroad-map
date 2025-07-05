@@ -10,11 +10,12 @@
     #modeLabel {
       position:absolute;
       top:10px; left:10px;
-      background:red;
+      background:green;
       color:white;
       padding:5px 10px;
       border-radius:4px;
       z-index:1000;
+      cursor:pointer;
     }
     #citySelect {
       position:absolute;
@@ -41,6 +42,16 @@
       cursor:pointer;
       z-index:1000;
     }
+    #warn {
+      position:absolute;
+      top:130px; left:10px;
+      background:red;
+      color:white;
+      padding:5px 10px;
+      border-radius:4px;
+      display:none;
+      z-index:1000;
+    }
     .voteBtn {
       position:absolute;
       bottom:10px;
@@ -53,33 +64,23 @@
       margin:5px;
       z-index:1000;
     }
-    #warn {
-      position:absolute;
-      top:130px; left:10px;
-      background:red;
-      color:white;
-      padding:5px 10px;
-      border-radius:4px;
-      display:none;
-      z-index:1000;
-    }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-  <div id="modeLabel">Режим: Голосование</div>
+  <div id="modeLabel">Режим: Свободная езда</div>
   <select id="citySelect">
     <option value="Novorossiysk">Новороссийск</option>
     <option value="Berlin">Берлин</option>
     <option value="Leipzig">Лейпциг</option>
     <option value="Dresden">Дрезден</option>
   </select>
-  <div id="voteInfo">Голосы: ←0 | ↑0 | →0<br>Города: Новороссийск:0, Берлин:0, Лейпциг:0, Дрезден:0</div>
+  <div id="voteInfo">Голосов: ←0 | ↑0 | →0</div>
   <div id="radioToggle">▶ Радио</div>
   <div id="warn">Вы не туда повернули!</div>
   <button class="voteBtn" id="voteLeft" style="left:10px;">⬅ Влево</button>
-  <button class="voteBtn" id="voteStraight" style="left:100px;">⬆ Прямо</button>
-  <button class="voteBtn" id="voteRight" style="left:200px;">➡ Вправо</button>
+  <button class="voteBtn" id="voteStraight" style="left:110px;">⬆ Прямо</button>
+  <button class="voteBtn" id="voteRight" style="left:210px;">➡ Вправо</button>
   <div id="map"></div>
   <div id="street-view"></div>
 
@@ -90,9 +91,9 @@ radio.loop = true;
 radio.volume = 0.5;
 let radioPlaying = false;
 
-let directionVotes = { left:0, straight:0, right:0 };
-let cityVotes = { Novorossiysk:0, Berlin:0, Leipzig:0, Dresden:0 };
-let votedDirection = null;
+let voteState = { left:0, straight:0, right:0 };
+let currentMode = "free";
+let lastDir = null;
 
 const cities = {
   Novorossiysk: { lat:44.7236, lng:37.7689 },
@@ -103,7 +104,7 @@ const cities = {
 
 function initMap() {
   map = new google.maps.Map(document.getElementById("map"), {
-    zoom:15,
+    zoom:14,
     center:cities.Novorossiysk
   });
 
@@ -118,62 +119,14 @@ function initMap() {
 
   map.setStreetView(streetView);
 
-  // city markers
+  // маркеры
   for (let city in cities) {
     const marker = new google.maps.Marker({
       position:cities[city],
       map:map,
       title:city
     });
-    marker.addListener("click",()=>{
-      cityVotes[city]++;
-      updateVoteInfo();
-      map.setCenter(cities[city]);
-      streetView.setPosition(cities[city]);
-    });
   }
-}
-
-// голосование направления
-["voteLeft","voteStraight","voteRight"].forEach(id=>{
-  document.getElementById(id).addEventListener("click",()=>{
-    const dir = id.replace("vote","");
-    directionVotes[dir.toLowerCase()]++;
-    votedDirection = getWinnerDirection();
-    updateVoteInfo();
-  });
-});
-
-function updateVoteInfo(){
-  document.getElementById("voteInfo").innerHTML =
-    `Голосы: ←${directionVotes.left} | ↑${directionVotes.straight} | →${directionVotes.right}<br>
-     Города: Новороссийск:${cityVotes.Novorossiysk}, Берлин:${cityVotes.Berlin}, Лейпциг:${cityVotes.Leipzig}, Дрезден:${cityVotes.Dresden}`;
-}
-
-function getWinnerDirection(){
-  let max = Math.max(directionVotes.left, directionVotes.straight, directionVotes.right);
-  if (max===directionVotes.left) return "left";
-  if (max===directionVotes.right) return "right";
-  return "straight";
-}
-
-streetView.addListener("pov_changed",()=>{
-  if(votedDirection){
-    let heading = streetView.getPov().heading;
-    let chosen = headingDirection(heading);
-    if(chosen !== votedDirection){
-      document.getElementById("warn").style.display = "block";
-    }else{
-      document.getElementById("warn").style.display = "none";
-    }
-  }
-});
-
-function headingDirection(heading){
-  heading = (heading+360)%360;
-  if(heading>45 && heading<135) return "right";
-  if(heading>225 && heading<315) return "left";
-  return "straight";
 }
 
 // выбор города
@@ -183,18 +136,78 @@ document.getElementById("citySelect").addEventListener("change", e=>{
   streetView.setPosition(cities[city]);
 });
 
+// режим переключения
+document.getElementById("modeLabel").addEventListener("click",()=>{
+  if(currentMode==="free"){
+    currentMode="vote";
+    document.getElementById("modeLabel").textContent="Режим: Голосование";
+    document.getElementById("modeLabel").style.background="red";
+    voteState = { left:0, straight:0, right:0 };
+    updateVoteInfo();
+  }else{
+    currentMode="free";
+    document.getElementById("modeLabel").textContent="Режим: Свободная езда";
+    document.getElementById("modeLabel").style.background="green";
+    document.getElementById("warn").style.display="none";
+  }
+});
+
 // радио
 document.getElementById("radioToggle").addEventListener("click",()=>{
   if(radioPlaying){
     radio.pause();
-    radioPlaying = false;
+    radioPlaying=false;
     document.getElementById("radioToggle").textContent="▶ Радио";
   }else{
     radio.play();
-    radioPlaying = true;
+    radioPlaying=true;
     document.getElementById("radioToggle").textContent="⏸ Радио";
   }
 });
+
+// голосование кнопками
+["voteLeft","voteStraight","voteRight"].forEach(id=>{
+  document.getElementById(id).addEventListener("click",()=>{
+    if(currentMode==="vote"){
+      const dir = id.replace("vote","");
+      voteState[dir.toLowerCase()]++;
+      updateVoteInfo();
+    }
+  });
+});
+
+function updateVoteInfo(){
+  document.getElementById("voteInfo").innerHTML =
+    `Голосов: ←${voteState.left} | ↑${voteState.straight} | →${voteState.right}`;
+}
+
+// отлов движения
+streetView.addListener("pov_changed",()=>{
+  if(currentMode==="vote"){
+    let heading = streetView.getPov().heading;
+    let chosen = headingDirection(heading);
+    if(lastDir!==chosen){
+      lastDir=chosen;
+      // определяем победителя
+      let max = Math.max(voteState.left,voteState.straight,voteState.right);
+      let winner="straight";
+      if(max===voteState.left) winner="left";
+      if(max===voteState.right) winner="right";
+      if(chosen!==winner && max>0){
+        document.getElementById("warn").style.display="block";
+      }else{
+        document.getElementById("warn").style.display="none";
+      }
+    }
+  }
+});
+
+function headingDirection(heading){
+  heading=(heading+360)%360;
+  if(heading>45 && heading<135) return "right";
+  if(heading>225 && heading<315) return "left";
+  return "straight";
+}
 
 // Telegram
 window.onload=()=>{
