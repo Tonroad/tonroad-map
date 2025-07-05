@@ -23,33 +23,32 @@
       padding: 5px 10px; border-radius: 4px;
       z-index: 1000;
     }
+    #directionMessage {
+      position: absolute; top: 90px; left: 10px;
+      background: red; color: white;
+      padding: 5px 10px; border-radius: 4px;
+      z-index: 1000;
+    }
     #radioToggle {
-      position: absolute; top: 90px; right: 10px;
+      position: absolute; top: 130px; right: 10px;
       z-index: 1000;
       background: orange; color: white;
       padding: 5px 10px; border-radius: 4px;
       cursor: pointer;
     }
-    #directionMessage {
-      position: absolute; top: 130px; left: 10px;
-      background: red; color: white;
-      padding: 5px 10px; border-radius: 4px;
-      z-index: 1000;
-    }
-    .voteButton {
-      position: absolute;
+    .vote-button {
+      position: fixed;
       bottom: 10px;
       padding: 10px;
       background: white;
-      color: black;
-      border: 1px solid #333;
+      border: 1px solid #ccc;
       border-radius: 4px;
-      cursor: pointer;
       z-index: 1000;
+      font-size: 16px;
     }
-    #voteLeft { left: 10px; }
-    #voteStraight { left: 110px; }
-    #voteRight { left: 210px; }
+    #leftBtn { left: 10px; }
+    #straightBtn { left: 40%; }
+    #rightBtn { right: 10px; }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -62,21 +61,20 @@
     <option value="Novorossiysk">Новороссийск</option>
   </select>
   <div id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</div>
-  <div id="radioToggle">▶ Радио</div>
   <div id="directionMessage"></div>
+  <div id="radioToggle">▶ Радио</div>
 
   <div id="map"></div>
   <div id="street-view"></div>
 
-  <button id="voteLeft" class="voteButton">← Влево</button>
-  <button id="voteStraight" class="voteButton">↑ Прямо</button>
-  <button id="voteRight" class="voteButton">→ Вправо</button>
+  <button id="leftBtn" class="vote-button">← Влево</button>
+  <button id="straightBtn" class="vote-button">↑ Прямо</button>
+  <button id="rightBtn" class="vote-button">→ Вправо</button>
 
 <script>
 let map, streetView;
 let currentVotes = { left: 0, right: 0, straight: 0 };
 let mode = "free";
-let lastMajorityDirection = null;
 let radio = new Audio("https://icecast.radiohitz.club/club.mp3");
 radio.loop = true; radio.volume = 0.5;
 let radioPlaying = false;
@@ -101,7 +99,7 @@ function initMap() {
   map.setStreetView(streetView);
 }
 
-// переключатель режимов
+// режим переключения
 document.getElementById("modeLabel").addEventListener("click", () => {
   if (mode === "free") {
     mode = "voting";
@@ -117,11 +115,6 @@ document.getElementById("modeLabel").addEventListener("click", () => {
   }
 });
 
-// ручное голосование
-document.getElementById("voteLeft").addEventListener("click", () => handleVote("left"));
-document.getElementById("voteStraight").addEventListener("click", () => handleVote("straight"));
-document.getElementById("voteRight").addEventListener("click", () => handleVote("right"));
-
 document.getElementById("citySelect").addEventListener("change", e => {
   const city = cities[e.target.value];
   if (city) {
@@ -130,23 +123,19 @@ document.getElementById("citySelect").addEventListener("change", e => {
   }
 });
 
-function handleVote(dir) {
-  if (mode !== "voting") return;
-
-  currentVotes[dir]++;
+// голосовые кнопки
+document.getElementById("leftBtn").addEventListener("click", () => {
+  currentVotes.left++;
   updateVoteDisplay();
-
-  const maxDir = Object.keys(currentVotes).reduce((a,b) => currentVotes[a]>currentVotes[b]?a:b);
-  lastMajorityDirection = maxDir;
-
-  // поворот камеры
-  let pov = streetView.getPov();
-  if (maxDir === "left") pov.heading -= 45;
-  if (maxDir === "right") pov.heading += 45;
-  streetView.setPov(pov);
-
-  console.log(`голос за ${dir}, всего:`, currentVotes);
-}
+});
+document.getElementById("straightBtn").addEventListener("click", () => {
+  currentVotes.straight++;
+  updateVoteDisplay();
+});
+document.getElementById("rightBtn").addEventListener("click", () => {
+  currentVotes.right++;
+  updateVoteDisplay();
+});
 
 function updateVoteDisplay() {
   document.getElementById("voteResults").textContent =
@@ -158,31 +147,7 @@ function resetVotes() {
   updateVoteDisplay();
 }
 
-// Google стрелки обработаем через панораму
-streetView?.addListener("links_changed", () => {
-  if (mode !== "voting") return;
-
-  const links = streetView.getLinks();
-  links.forEach(link => {
-    let direction = null;
-    if (link.heading < 45 && link.heading > -45) direction = "straight";
-    else if (link.heading <= -45) direction = "left";
-    else if (link.heading >= 45) direction = "right";
-
-    if (direction && lastMajorityDirection) {
-      if (direction === lastMajorityDirection) {
-        document.getElementById("directionMessage").textContent =
-          `Вы поехали как большинство (${direction})`;
-      } else {
-        document.getElementById("directionMessage").textContent =
-          `Вы поехали не как большинство (выбрали ${lastMajorityDirection})`;
-      }
-      resetVotes();
-    }
-  });
-});
-
-// радио
+// radio
 document.getElementById("radioToggle").addEventListener("click", () => {
   if (radioPlaying) {
     radio.pause();
@@ -195,6 +160,33 @@ document.getElementById("radioToggle").addEventListener("click", () => {
   }
 });
 
+// голосование при движении
+streetView?.addListener("links_changed", () => {
+  if (mode !== "voting") return;
+
+  const pov = streetView.getPov();
+  let dir = "straight";
+  if (pov.heading <= -45) dir = "left";
+  if (pov.heading >= 45) dir = "right";
+
+  // подсчёт голосов
+  const maxDir = Object.keys(currentVotes).reduce((a,b) => currentVotes[a]>currentVotes[b]?a:b);
+  const total = currentVotes.left + currentVotes.straight + currentVotes.right;
+
+  if (total > 0) {
+    if (dir === maxDir) {
+      document.getElementById("directionMessage").textContent =
+        `Вы поехали как большинство (${dir})`;
+    } else {
+      document.getElementById("directionMessage").textContent =
+        `Вы поехали не как большинство (большинство выбрало ${maxDir})`;
+    }
+  }
+
+  resetVotes();
+});
+
+// telegram init
 window.onload = () => {
   try {
     const tg = window.Telegram.WebApp;
