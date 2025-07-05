@@ -17,10 +17,49 @@
       cursor:pointer;
       border-radius:4px;
     }
+    #citySelect {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 999;
+      padding: 6px;
+      font-size: 14px;
+    }
+    #controls {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      z-index: 999;
+    }
+    #controls button {
+      margin: 2px;
+      padding: 6px 10px;
+      border: none;
+      border-radius: 4px;
+      background-color: #333;
+      color: white;
+      cursor: pointer;
+    }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
+
+  <!-- список городов -->
+  <select id="citySelect">
+    <option value="Berlin">Berlin</option>
+    <option value="Leipzig">Leipzig</option>
+    <option value="Dresden">Dresden</option>
+  </select>
+
+  <!-- кнопки управления -->
+  <div id="controls">
+    <button onclick="moveForward()">⬆️</button>
+    <button onclick="moveBackward()">⬇️</button>
+    <button onclick="turnLeft()">⬅️</button>
+    <button onclick="turnRight()">➡️</button>
+  </div>
+
   <div id="map"></div>
   <div id="street-view"></div>
 
@@ -70,6 +109,33 @@ function initMap() {
 
     cityMarkers[city.name] = { ...city, marker, info };
   });
+
+  // выбор города
+  document.getElementById("citySelect").addEventListener("change", e => {
+    const cityName = e.target.value;
+    const city = cityMarkers[cityName];
+    if (city) {
+      map.setCenter(city.position);
+      streetView.setPosition(city.position);
+      streetView.setPov({ heading: 0, pitch: 0 });
+    }
+  });
+}
+
+// движение
+function moveForward() {
+  streetView.setZoom(streetView.getZoom() + 0.5);
+}
+function moveBackward() {
+  streetView.setZoom(Math.max(streetView.getZoom() - 0.5, 0));
+}
+function turnLeft() {
+  const pov = streetView.getPov();
+  streetView.setPov({ heading: pov.heading - 20, pitch: pov.pitch });
+}
+function turnRight() {
+  const pov = streetView.getPov();
+  streetView.setPov({ heading: pov.heading + 20, pitch: pov.pitch });
 }
 
 function registerVote(cityName) {
