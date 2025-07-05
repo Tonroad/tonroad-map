@@ -4,59 +4,35 @@
   <meta charset="UTF-8">
   <title>TonRoad</title>
   <style>
-    body, html {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      overflow: hidden;
-      font-family: Arial, sans-serif;
-    }
-    #map {
-      height: 33%;
-      width: 100%;
-    }
-    #pano {
-      height: 67%;
-      width: 100%;
-      position: relative;
-    }
+    body, html { margin:0; padding:0; height:100%; overflow: hidden; font-family: Arial, sans-serif; }
+    #map { height: 33%; width: 100%; }
+    #pano { height: 67%; width: 100%; position: relative; }
     #controls {
-      position: absolute;
-      bottom: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 999;
+      position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 999;
     }
     #status {
-      position: absolute;
-      top: 5px;
-      left: 5px;
-      padding: 5px 10px;
-      color: #fff;
-      font-weight: bold;
+      position: absolute; top: 5px; left: 5px;
+      padding: 5px 10px; color: #fff; font-weight: bold;
       border-radius: 5px;
+      background-color: red;
+      z-index: 999;
     }
     .vote-button {
-      padding: 10px 20px;
-      margin: 5px;
-      font-size: 16px;
+      padding: 10px 20px; margin: 5px; font-size: 16px;
     }
     #driveButton {
-      background-color: green;
-      color: white;
-      padding: 10px 20px;
-      font-size: 16px;
-      border: none;
-      border-radius: 4px;
+      background-color: green; color: white;
+      padding: 10px 20px; font-size: 16px;
+      border: none; border-radius: 4px;
       margin-left: 5px;
-      display: none;
     }
   </style>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
   <div id="map"></div>
   <div id="pano">
-    <div id="status" style="background-color: red;">Режим: Голосование</div>
+    <div id="status">Режим: Голосование</div>
     <div id="controls">
       <button id="left" class="vote-button">← Влево</button>
       <button id="straight" class="vote-button">↑ Прямо</button>
@@ -66,7 +42,7 @@
   </div>
 
   <script>
-    let mode = 'voting'; // or 'free'
+    let mode = 'voting'; // начнем с голосования
     let votes = {left: 0, straight: 0, right: 0};
     let map, panorama;
 
@@ -76,13 +52,11 @@
         zoom: 14
       });
 
-      panorama = new google.maps.StreetViewPanorama(
-        document.getElementById("pano"), {
-          position: { lat: 44.7239, lng: 37.7689 },
-          pov: { heading: 165, pitch: 0 },
-          disableDefaultUI: false
-        }
-      );
+      panorama = new google.maps.StreetViewPanorama(document.getElementById("pano"), {
+        position: { lat: 44.7239, lng: 37.7689 },
+        pov: { heading: 165, pitch: 0 },
+        disableDefaultUI: false
+      });
       map.setStreetView(panorama);
 
       updateMode();
@@ -95,23 +69,13 @@
 
     function updateMode() {
       const status = document.getElementById("status");
-      const driveButton = document.getElementById("driveButton");
-
       if (mode === "voting") {
         status.textContent = "Режим: Голосование";
         status.style.backgroundColor = "red";
-        document.getElementById("left").style.display = "";
-        document.getElementById("straight").style.display = "";
-        document.getElementById("right").style.display = "";
-        driveButton.style.display = "inline-block";
         panorama.setOptions({clickToGo: false});
       } else {
         status.textContent = "Режим: Свободная езда";
         status.style.backgroundColor = "green";
-        document.getElementById("left").style.display = "none";
-        document.getElementById("straight").style.display = "none";
-        document.getElementById("right").style.display = "none";
-        driveButton.style.display = "none";
         panorama.setOptions({clickToGo: true});
       }
     }
@@ -124,31 +88,35 @@
 
     function drive() {
       if (mode !== "voting") return;
-
       let maxVotes = Math.max(votes.left, votes.straight, votes.right);
       if (maxVotes === 0) {
         alert("Нет голосов для движения");
         return;
       }
       let winner = Object.keys(votes).find(dir => votes[dir] === maxVotes);
-      alert(`Вы поехали как большинство: ${winner}`);
+      alert(`Поехали как выбрало большинство: ${winner}`);
 
-      // для примера только
       switch (winner) {
         case "left": panorama.setPov({heading: panorama.getPov().heading - 90, pitch: 0}); break;
         case "right": panorama.setPov({heading: panorama.getPov().heading + 90, pitch: 0}); break;
         case "straight": panorama.setPosition(panorama.getPosition()); break;
       }
 
-      votes = {left: 0, straight: 0, right: 0}; // сбросить
+      // сброс голосов
+      votes = {left: 0, straight: 0, right: 0};
     }
 
-    // пример переключения режима
-    function setMode(newMode) {
-      mode = newMode;
-      updateMode();
-    }
+    // Telegram init
+    window.onload = function() {
+      try {
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        window.telegramUserId = tg.initDataUnsafe?.user?.id || "unknown";
+      } catch(e) {
+        console.error("Ошибка Telegram SDK", e);
+      }
+    };
   </script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap" async defer></script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap" async defer></script>
 </body>
 </html>
