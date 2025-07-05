@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
   <title>TonRoad</title>
-  <meta charset="utf-8" />
   <style>
     html, body { margin:0; padding:0; height:100%; }
     #map { height:50%; width:100%; }
@@ -17,22 +17,6 @@
       z-index: 1000;
       cursor: pointer;
     }
-    #citySelect {
-      position: absolute;
-      top: 10px; right: 10px;
-      z-index: 1000;
-      padding: 5px;
-    }
-    #radioToggle {
-      position: absolute;
-      top: 50px; right: 10px;
-      z-index: 1000;
-      background: orange;
-      color: white;
-      padding: 5px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-    }
     #voteInfo {
       position: absolute;
       top: 50px; left: 10px;
@@ -41,48 +25,69 @@
       padding: 5px 10px;
       border-radius: 4px;
       z-index: 1000;
+      display: none;
     }
-    .voteBtn {
+    #citySelect {
+      position: absolute;
+      top: 10px; right: 10px;
+      z-index: 1000;
+      padding: 5px;
+    }
+    #radioToggle {
+      position: absolute;
+      top: 90px; right: 10px;
+      z-index: 1000;
+      background: orange;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .dirBtn {
       position: absolute;
       bottom: 10px;
-      padding: 10px 20px;
       background: #4285F4;
       color: white;
       border: none;
       border-radius: 4px;
+      padding: 5px 10px;
       cursor: pointer;
       z-index: 1000;
     }
-    #leftBtn { left: 10px; }
-    #straightBtn { left: 50%; transform: translateX(-50%); }
-    #rightBtn { right: 10px; }
+    #btnLeft { left: 10px; }
+    #btnStraight { left: 50%; transform: translateX(-50%); }
+    #btnRight { right: 10px; }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-  <div id="modeLabel">Режим: Голосование</div>
+  <div id="modeLabel">Режим: Свободная езда</div>
+  <div id="voteInfo">Голосование: ← 0 | ↑ 0 | → 0</div>
   <select id="citySelect">
     <option value="Berlin">Берлин</option>
     <option value="Leipzig">Лейпциг</option>
     <option value="Dresden">Дрезден</option>
-    <option value="Novorossiysk" selected>Новороссийск</option>
+    <option value="Novorossiysk">Новороссийск</option>
   </select>
   <div id="radioToggle">▶ Радио</div>
-  <div id="voteInfo">Голосование: ← 0 | ↑ 0 | → 0</div>
-  <button class="voteBtn" id="leftBtn">⬅ Влево</button>
-  <button class="voteBtn" id="straightBtn">⬆ Прямо</button>
-  <button class="voteBtn" id="rightBtn">➡ Вправо</button>
   <div id="map"></div>
   <div id="street-view"></div>
 
+  <button id="btnLeft" class="dirBtn">⬅ Влево</button>
+  <button id="btnStraight" class="dirBtn">⬆ Прямо</button>
+  <button id="btnRight" class="dirBtn">➡ Вправо</button>
+
 <script>
 let map, streetView;
-let votes = { left: 0, straight: 0, right: 0 };
+let voteState = {
+  mode: "free",
+  driveVotes: {left:0, straight:0, right:0},
+  timer: null
+};
 let radio = new Audio("https://icecast.radiohitz.club/club.mp3");
 radio.loop = true;
 radio.volume = 0.5;
 let radioPlaying = false;
-let voteTimer = null;
 
 const cities = {
   Berlin: { lat: 52.5200, lng: 13.4050 },
@@ -92,48 +97,63 @@ const cities = {
 };
 
 function initMap() {
-  const startCity = cities.Novorossiysk;
   map = new google.maps.Map(document.getElementById("map"), {
     zoom: 14,
-    center: startCity
+    center: cities.Berlin
   });
 
   streetView = new google.maps.StreetViewPanorama(document.getElementById("street-view"), {
-    position: startCity,
+    position: cities.Berlin,
     pov: { heading: 0, pitch: 0 },
     visible: true
   });
-
   map.setStreetView(streetView);
 }
 
-function updateVoteInfo() {
+function switchMode() {
+  if (voteState.mode === "free") {
+    voteState.mode = "voting";
+    document.getElementById("modeLabel").textContent = "Режим: Голосование";
+    document.getElementById("modeLabel").style.background = "red";
+    document.getElementById("voteInfo").style.display = "block";
+    resetVotes();
+    startVoteTimer();
+  } else if (voteState.mode === "voting") {
+    voteState.mode = "free";
+    document.getElementById("modeLabel").textContent = "Режим: Свободная езда";
+    document.getElementById("modeLabel").style.background = "green";
+    document.getElementById("voteInfo").style.display = "none";
+    clearInterval(voteState.timer);
+    resetVotes();
+  }
+}
+
+function resetVotes() {
+  voteState.driveVotes = {left:0, straight:0, right:0};
+  updateVoteStatus();
+}
+
+function updateVoteStatus() {
   document.getElementById("voteInfo").textContent =
-    `Голосование: ← ${votes.left} | ↑ ${votes.straight} | → ${votes.right}`;
+    `Голосование: ← ${voteState.driveVotes.left} | ↑ ${voteState.driveVotes.straight} | → ${voteState.driveVotes.right}`;
 }
 
-function registerVote(dir) {
-  votes[dir]++;
-  updateVoteInfo();
-  if (!voteTimer) {
-    voteTimer = setTimeout(applyVote, 5000);
-  }
-}
-
-function applyVote() {
-  let maxVotes = 0;
-  let chosenDir = "straight";
-  for (let [dir, count] of Object.entries(votes)) {
-    if (count > maxVotes) {
-      maxVotes = count;
-      chosenDir = dir;
+function startVoteTimer() {
+  clearInterval(voteState.timer);
+  voteState.timer = setInterval(() => {
+    let maxDir = "straight";
+    let maxCount = voteState.driveVotes.straight;
+    if (voteState.driveVotes.left > maxCount) {
+      maxDir = "left";
+      maxCount = voteState.driveVotes.left;
     }
-  }
-
-  moveStreetView(chosenDir);
-  votes = { left: 0, straight: 0, right: 0 };
-  updateVoteInfo();
-  voteTimer = null;
+    if (voteState.driveVotes.right > maxCount) {
+      maxDir = "right";
+      maxCount = voteState.driveVotes.right;
+    }
+    moveStreetView(maxDir);
+    resetVotes();
+  }, 5000);
 }
 
 function moveStreetView(direction) {
@@ -144,24 +164,32 @@ function moveStreetView(direction) {
     pov.heading += 30;
   }
   streetView.setPov(pov);
-  streetView.getLinks().forEach(link => {
-    if (direction === "straight") {
-      streetView.setPano(link.pano);
-    }
-  });
 }
 
-document.getElementById("leftBtn").addEventListener("click", () => registerVote("left"));
-document.getElementById("straightBtn").addEventListener("click", () => registerVote("straight"));
-document.getElementById("rightBtn").addEventListener("click", () => registerVote("right"));
-
-document.getElementById("citySelect").addEventListener("change", e => {
-  const city = cities[e.target.value];
-  if (city) {
-    map.setCenter(city);
-    streetView.setPosition(city);
-    streetView.setPov({ heading: 0, pitch: 0 });
+document.getElementById("modeLabel").addEventListener("click", switchMode);
+document.getElementById("btnLeft").addEventListener("click", () => {
+  if (voteState.mode === "voting") {
+    voteState.driveVotes.left++;
+    updateVoteStatus();
   }
+});
+document.getElementById("btnStraight").addEventListener("click", () => {
+  if (voteState.mode === "voting") {
+    voteState.driveVotes.straight++;
+    updateVoteStatus();
+  }
+});
+document.getElementById("btnRight").addEventListener("click", () => {
+  if (voteState.mode === "voting") {
+    voteState.driveVotes.right++;
+    updateVoteStatus();
+  }
+});
+document.getElementById("citySelect").addEventListener("change", e => {
+  let pos = cities[e.target.value];
+  map.setCenter(pos);
+  streetView.setPosition(pos);
+  streetView.setPov({heading:0, pitch:0});
 });
 
 document.getElementById("radioToggle").addEventListener("click", () => {
@@ -180,12 +208,12 @@ window.onload = function() {
   try {
     const tg = window.Telegram.WebApp;
     tg.ready();
-    window.telegramUserId = tg.initDataUnsafe?.user?.id || "unknown";
-  } catch (e) {
-    console.error("Telegram SDK ошибка", e);
+    console.log("Telegram SDK инициализирован");
+  } catch(e) {
+    console.error("Ошибка Telegram SDK", e);
   }
 };
 </script>
-<script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap" async defer></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap" async defer></script>
 </body>
 </html>
