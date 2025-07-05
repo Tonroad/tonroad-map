@@ -1,25 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>TonRoad Map + Street View + Голосование + Радио</title>
+  <title>TonRoad + Street View</title>
   <meta charset="utf-8" />
   <style>
     html, body { margin:0; padding:0; height:100%; }
     #map { height:50%; width:100%; }
     #street-view { height:50%; width:100%; }
-    .vote-btn, .mode-btn {
+    .control-btn {
       margin:5px;
-      padding:5px 10px;
-      background-color:#4285F4;
-      color:white;
+      padding:8px 12px;
       border:none;
       border-radius:4px;
       cursor:pointer;
-    }
-    #citySelect {
-      margin:5px;
-      padding:5px;
-      font-size:16px;
     }
     #modeStatus {
       position:absolute;
@@ -33,134 +26,162 @@
     }
     #radioBtn {
       position:absolute;
-      top:10px;
-      left:200px;
-      z-index:999;
+      top:50px;   /* немного ниже */
+      right:10px;
       background-color:#f39c12;
+      color:white;
+      padding:5px 10px;
+      border-radius:4px;
+      border:none;
+      cursor:pointer;
+      z-index:999;
+    }
+    #citySelect {
+      position:absolute;
+      top:90px;
+      left:10px;
+      z-index:999;
+      padding:5px;
+    }
+    #controls {
+      position:absolute;
+      bottom:10px;
+      left:50%;
+      transform:translateX(-50%);
+      z-index:999;
     }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-  <div id="modeStatus">Режим: Свободная езда</div>
+  <div id="modeStatus">Режим: Голосование</div>
+  <button id="radioBtn">⏸ Радио</button>
   <select id="citySelect">
     <option value="Berlin">Берлин</option>
     <option value="Leipzig">Лейпциг</option>
     <option value="Dresden">Дрезден</option>
     <option value="Novorossiysk">Новороссийск</option>
   </select>
-  <button class="mode-btn" id="toggleMode">Переключить режим</button>
-  <button class="vote-btn" id="forwardBtn">↑ Вперёд</button>
-  <button class="vote-btn" id="backwardBtn">↓ Назад</button>
-  <button class="mode-btn" id="radioBtn">▶️ Радио</button>
-  <audio id="radioPlayer" src="https://streams.ilovemusic.de/iloveradio17.mp3" preload="none"></audio>
   <div id="map"></div>
   <div id="street-view"></div>
+  <div id="controls">
+    <button id="forwardBtn" class="control-btn">↑ Вперёд</button>
+    <button id="backwardBtn" class="control-btn">↓ Назад</button>
+  </div>
 
 <script>
-let map, streetView, voteState = { currentVote:null, routeLine:null }, cityMarkers={};
-let driveMode = "free";
-let radioPlaying = false;
-
-const cities = [
-  { name:"Berlin", lat:52.52, lng:13.405 },
-  { name:"Leipzig", lat:51.3397, lng:12.3731 },
-  { name:"Dresden", lat:51.0504, lng:13.7373 },
-  { name:"Novorossiysk", lat:44.7235, lng:37.7689 }
-];
+let map, streetView, voteState = { currentVote:null, routeLine:null }, cityMarkers={}, currentPanoId = null, currentLinks = [];
+let mode = "vote";
+let audio = new Audio("https://icecast.radiofrance.fr/fip-midfi.mp3"); // пример радио
+audio.loop = true;
 
 function initMap() {
-  const berlin = { lat:52.52, lng:13.405 };
+  const cities = [
+    { name:"Berlin", position:{lat:52.5208, lng:13.4095} },
+    { name:"Leipzig", position:{lat:51.3397, lng:12.3731} },
+    { name:"Dresden", position:{lat:51.0504, lng:13.7373} },
+    { name:"Novorossiysk", position:{lat:44.7234, lng:37.7689} }
+  ];
 
   map = new google.maps.Map(document.getElementById("map"), {
-    center: berlin,
-    zoom: 14
+    center:cities[0].position,
+    zoom:12
   });
 
   streetView = new google.maps.StreetViewPanorama(document.getElementById("street-view"), {
-    position: berlin,
+    position:cities[0].position,
     pov:{heading:0, pitch:0},
     visible:true
   });
-
   map.setStreetView(streetView);
 
   cities.forEach(city => {
     const marker = new google.maps.Marker({
-      position: {lat:city.lat, lng:city.lng},
+      position: city.position,
       map: map,
       title: city.name
     });
-    cityMarkers[city.name] = { ...city, marker };
+
+    const info = new google.maps.InfoWindow({
+      content: `<strong>${city.name}</strong><br><button onclick="registerVote('${city.name}')">Голосовать</button>`
+    });
+
+    marker.addListener("click", () => {
+      info.open(map, marker);
+      if(mode === "free") {
+        streetView.setPosition(city.position);
+        streetView.setPov({heading:0,pitch:0});
+      }
+    });
+
+    cityMarkers[city.name] = { ...city, marker, info };
+  });
+
+  streetView.addListener("pano_changed", () => {
+    currentPanoId = streetView.getPano();
+    currentLinks = streetView.getLinks();
   });
 }
 
-// режим
-document.getElementById("toggleMode").addEventListener("click", () => {
-  if (driveMode === "free") {
-    driveMode = "voting";
-    document.getElementById("modeStatus").textContent = "Режим: Голосование";
-  } else {
-    driveMode = "free";
-    document.getElementById("modeStatus").textContent = "Режим: Свободная езда";
-  }
-});
+function registerVote(cityName) {
+  if(mode !== "vote") return;
+  voteState.currentVote = cityName;
+  const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || "unknown";
 
-// выбор города
+  fetch('/api/vote', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ city: cityName, userId: userId })
+  })
+  .then(res => res.json())
+  .then(data => {
+    alert(`Голос за ${data.voted} принят`);
+    streetView.setPosition(cityMarkers[cityName].position);
+    streetView.setPov({heading:0,pitch:0});
+  })
+  .catch(console.error);
+}
+
 document.getElementById("citySelect").addEventListener("change", e => {
   const cityName = e.target.value;
   const city = cityMarkers[cityName];
-  if (city) {
-    map.setCenter({lat:city.lat, lng:city.lng});
-    streetView.setPosition({lat:city.lat, lng:city.lng});
-    streetView.setPov({ heading: 0, pitch: 0 });
+  if(city) {
+    map.setCenter(city.position);
+    streetView.setPosition(city.position);
+    streetView.setPov({heading:0,pitch:0});
   }
 });
 
-// кнопки
 document.getElementById("forwardBtn").addEventListener("click", () => {
-  if (driveMode === "free") {
-    moveStreetView(1);
-  } else {
-    sendVote("forward");
+  if(currentLinks.length > 0) {
+    streetView.setPano(currentLinks[0].pano);
   }
 });
 document.getElementById("backwardBtn").addEventListener("click", () => {
-  if (driveMode === "free") {
-    moveStreetView(-1);
-  } else {
-    sendVote("backward");
+  if(currentLinks.length > 1) {
+    streetView.setPano(currentLinks[1].pano);
   }
 });
 
-// радио
+document.getElementById("modeStatus").addEventListener("click", () => {
+  if(mode==="vote"){
+    mode="free";
+    document.getElementById("modeStatus").textContent="Режим: Свободная езда";
+  } else {
+    mode="vote";
+    document.getElementById("modeStatus").textContent="Режим: Голосование";
+  }
+});
+
 document.getElementById("radioBtn").addEventListener("click", () => {
-  const player = document.getElementById("radioPlayer");
-  if (!radioPlaying) {
-    player.play();
-    radioPlaying = true;
-    document.getElementById("radioBtn").textContent = "⏸️ Радио";
+  if(audio.paused){
+    audio.play();
+    document.getElementById("radioBtn").textContent="⏸ Радио";
   } else {
-    player.pause();
-    radioPlaying = false;
-    document.getElementById("radioBtn").textContent = "▶️ Радио";
+    audio.pause();
+    document.getElementById("radioBtn").textContent="▶ Радио";
   }
 });
-
-// движение Street View
-function moveStreetView(step) {
-  const currentPov = streetView.getPov();
-  streetView.setPov({
-    heading: currentPov.heading + step * 20,
-    pitch: currentPov.pitch
-  });
-}
-
-// заглушка голосования
-function sendVote(direction) {
-  alert(`Ваш голос за направление "${direction}" отправлен!`);
-}
-
 </script>
 <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap" async defer></script>
 </body>
