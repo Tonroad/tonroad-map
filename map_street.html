@@ -72,10 +72,12 @@
   <script>
     let map, streetView;
     let voteCounts = { left: 0, straight: 0, right: 0 };
+    let userVotes = {};
     let radio = new Audio("https://icecast.radiohitz.club/club.mp3");
     radio.loop = true;
     radio.volume = 0.5;
     let radioPlaying = false;
+    let currentMode = "voting";
 
     const cities = {
       Berlin: { lat: 52.52, lng: 13.405 },
@@ -99,62 +101,4 @@
 
     function updateVotes() {
       document.getElementById("voteResults").textContent =
-        `Голосов: ←${voteCounts.left} | ↑${voteCounts.straight} | →${voteCounts.right}`;
-    }
-
-    document.querySelectorAll(".voteBtn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const dir = btn.dataset.dir;
-        voteCounts[dir]++;
-        updateVotes();
-      });
-    });
-
-    document.getElementById("radioToggle").addEventListener("click", () => {
-      if (radioPlaying) {
-        radio.pause();
-        document.getElementById("radioToggle").textContent = "▶ Радио";
-      } else {
-        radio.play();
-        document.getElementById("radioToggle").textContent = "⏸ Радио";
-      }
-      radioPlaying = !radioPlaying;
-    });
-
-    document.getElementById("citySelect").addEventListener("change", e => {
-      const city = e.target.value;
-      streetView.setPosition(cities[city]);
-      map.setCenter(cities[city]);
-    });
-
-    streetView.addListener("position_changed", () => {
-      // определяем куда едем
-      const pov = streetView.getPov();
-      let selectedDir = "straight";
-      if (pov.heading > 45 && pov.heading < 135) selectedDir = "right";
-      else if (pov.heading > 225 && pov.heading < 315) selectedDir = "left";
-
-      const maxVotes = Math.max(voteCounts.left, voteCounts.straight, voteCounts.right);
-      let majorityDir = "straight";
-      if (voteCounts.left === maxVotes) majorityDir = "left";
-      if (voteCounts.right === maxVotes) majorityDir = "right";
-
-      const msg = document.getElementById("message");
-      if (selectedDir === majorityDir) {
-        msg.textContent = `Вы выбрали как большинство (${majorityDir})`;
-        msg.style.background = "green";
-      } else {
-        msg.textContent = `Вы поехали не туда (${majorityDir} голосовали)`;
-        msg.style.background = "red";
-      }
-      msg.style.display = "block";
-      setTimeout(() => msg.style.display = "none", 3000);
-
-      // сброс голосов
-      voteCounts = { left: 0, straight: 0, right: 0 };
-      updateVotes();
-    });
-  </script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDwiTxiNNEp-KbC4zGK4KMYIIVSkOVADug&callback=initMap" async defer></script>
-</body>
-</html>
+        `Голосов: ←${voteCounts.left} | ↑${voteCounts
