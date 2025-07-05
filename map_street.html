@@ -7,47 +7,44 @@
     html, body { margin:0; padding:0; height:100%; }
     #map { height:30%; width:100%; }
     #street-view { height:70%; width:100%; }
-    #blocker {
-      position: absolute;
-      top: 30%;
-      left: 0;
-      width: 100%;
-      height: 70%;
-      background: rgba(0,0,0,0);
-      z-index: 1001;
-      display: none;
-    }
     #modeLabel {
       position: absolute; top: 10px; left: 10px;
       background: green; color: white;
       padding: 5px 10px; border-radius: 4px;
-      z-index: 1002; cursor: pointer;
+      z-index: 1000; cursor: pointer;
     }
     #citySelect {
       position: absolute; top: 10px; right: 10px;
-      z-index: 1002; padding: 5px;
+      z-index: 1000; padding: 5px;
     }
     #voteResults {
       position: absolute; top: 50px; left: 10px;
       background: rgba(0,0,0,0.7); color: white;
       padding: 5px 10px; border-radius: 4px;
-      z-index: 1002;
+      z-index: 1000;
     }
     #radioToggle {
       position: absolute; top: 90px; right: 10px;
-      z-index: 1002;
+      z-index: 1000;
       background: orange; color: white;
       padding: 5px 10px; border-radius: 4px;
       cursor: pointer;
     }
     #goButton {
-      position: absolute; bottom: 20px; right: 20px;
+      position: absolute; bottom: 10px; right: 10px;
       background: green; color: white;
-      padding: 10px 20px; border-radius: 4px;
-      z-index: 1002;
-      display: none;
-      cursor: pointer;
+      padding: 10px 15px; border-radius: 4px;
+      z-index: 1000; cursor: pointer;
     }
+    .vote-button {
+      position: absolute; bottom: 10px;
+      background: white; border: 1px solid #ccc;
+      padding: 5px 10px; border-radius: 4px;
+      z-index: 1000; cursor: pointer;
+    }
+    #voteLeft { left: 10px; }
+    #voteStraight { left: 90px; }
+    #voteRight { left: 180px; }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -61,11 +58,12 @@
   </select>
   <div id="voteResults">Голосов: 0</div>
   <div id="radioToggle">▶ Радио</div>
-  <div id="goButton">ЕХАТЬ</div>
-  <div id="blocker"></div>
-
   <div id="map"></div>
   <div id="street-view"></div>
+  <button id="goButton" style="display:none;">ЕХАТЬ</button>
+  <button id="voteLeft" class="vote-button" style="display:none;">← Влево</button>
+  <button id="voteStraight" class="vote-button" style="display:none;">↑ Прямо</button>
+  <button id="voteRight" class="vote-button" style="display:none;">→ Вправо</button>
 
 <script>
 let map, streetView;
@@ -86,6 +84,7 @@ function initMap() {
   map = new google.maps.Map(document.getElementById("map"), {
     center: cities.Berlin, zoom: 14
   });
+
   streetView = new google.maps.StreetViewPanorama(document.getElementById("street-view"), {
     position: cities.Berlin,
     pov: { heading: 0, pitch: 0 },
@@ -99,16 +98,22 @@ document.getElementById("modeLabel").addEventListener("click", () => {
     mode = "voting";
     document.getElementById("modeLabel").textContent = "Режим: Голосование";
     document.getElementById("modeLabel").style.background = "red";
-    document.getElementById("blocker").style.display = "block";
     document.getElementById("goButton").style.display = "block";
+    document.getElementById("voteLeft").style.display = "block";
+    document.getElementById("voteStraight").style.display = "block";
+    document.getElementById("voteRight").style.display = "block";
     resetVotes();
+    disableGoogleArrows(true);
   } else {
     mode = "free";
     document.getElementById("modeLabel").textContent = "Режим: Свободная езда";
     document.getElementById("modeLabel").style.background = "green";
-    document.getElementById("blocker").style.display = "none";
     document.getElementById("goButton").style.display = "none";
+    document.getElementById("voteLeft").style.display = "none";
+    document.getElementById("voteStraight").style.display = "none";
+    document.getElementById("voteRight").style.display = "none";
     resetVotes();
+    disableGoogleArrows(false);
   }
 });
 
@@ -136,40 +141,48 @@ function resetVotes() {
   updateVoteDisplay();
 }
 
+function disableGoogleArrows(disable) {
+  streetView.setOptions({ disableDefaultUI: disable });
+}
+
+document.getElementById("voteLeft").addEventListener("click", () => handleVote("left"));
+document.getElementById("voteStraight").addEventListener("click", () => handleVote("straight"));
+document.getElementById("voteRight").addEventListener("click", () => handleVote("right"));
+
 document.getElementById("goButton").addEventListener("click", () => {
   const maxDir = Object.keys(currentVotes).reduce((a,b) => currentVotes[a]>currentVotes[b]?a:b);
-  const votesFor = currentVotes[maxDir];
   const total = currentVotes.left + currentVotes.straight + currentVotes.right;
 
   if (total === 0) {
-    showDirectionMessage("Нет голосов для движения");
+    showMessage("Нет голосов для движения");
     return;
   }
 
-  if (votesFor/total >= 0.5) {
-    movePanorama(maxDir);
-    showDirectionMessage(`Вы поехали как большинство (${maxDir})`);
-  } else {
-    showDirectionMessage(`Вы поехали не как большинство (выбрали ${maxDir})`);
-  }
+  movePanorama(maxDir);
+  showMessage(`Вы поехали как большинство (${maxDir})`);
   resetVotes();
 });
-
-function showDirectionMessage(msg) {
-  const res = document.getElementById("voteResults");
-  res.textContent = msg;
-  res.style.background = "red";
-  setTimeout(() => {
-    res.style.background = "rgba(0,0,0,0.7)";
-    updateVoteDisplay();
-  }, 3000);
-}
 
 function movePanorama(dir) {
   let pov = streetView.getPov();
   if (dir === "left") pov.heading -= 30;
   if (dir === "right") pov.heading += 30;
   streetView.setPov(pov);
+}
+
+function showMessage(msg) {
+  const el = document.createElement("div");
+  el.textContent = msg;
+  el.style.position = "absolute";
+  el.style.top = "80px";
+  el.style.left = "10px";
+  el.style.background = "red";
+  el.style.color = "white";
+  el.style.padding = "5px 10px";
+  el.style.zIndex = 1000;
+  el.style.borderRadius = "4px";
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
 }
 
 document.getElementById("radioToggle").addEventListener("click", () => {
@@ -188,7 +201,6 @@ window.onload = () => {
   try {
     const tg = window.Telegram.WebApp;
     tg.ready();
-    window.telegramUserId = tg.initDataUnsafe?.user?.id || "unknown";
   } catch(e){
     console.error("Ошибка Telegram SDK", e);
   }
