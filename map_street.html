@@ -1,175 +1,207 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8" />
   <title>TonRoad</title>
+  <meta charset="utf-8">
   <style>
     html, body { margin:0; padding:0; height:100%; }
-    #map { height:50%; width:100%; }
-    #street-view { height:50%; width:100%; }
+    #map { height:33%; width:100%; }
+    #street-view { height:67%; width:100%; }
     #modeLabel {
-      position:absolute; top:5px; left:5px;
-      background:red; color:white; padding:5px 10px; border-radius:4px;
-      z-index:1000; cursor:pointer;
+      position:absolute;
+      top:10px; left:10px;
+      background:red;
+      color:white;
+      padding:5px 10px;
+      border-radius:4px;
+      z-index:1000;
     }
     #citySelect {
-      position:absolute; top:5px; right:5px;
-      z-index:1000; padding:5px;
-    }
-    #radioToggle {
-      position:absolute; top:50px; right:5px;
-      z-index:1000; background:orange; color:white;
-      padding:5px 10px; border-radius:4px; cursor:pointer;
+      position:absolute;
+      top:10px; right:10px;
+      z-index:1000;
+      padding:5px;
     }
     #voteInfo {
-      position:absolute; top:45px; left:5px;
-      background:rgba(0,0,0,0.7); color:white;
-      padding:5px 10px; border-radius:4px; z-index:1000;
-      display:none;
+      position:absolute;
+      top:50px; left:10px;
+      background:rgba(0,0,0,0.7);
+      color:white;
+      padding:5px 10px;
+      border-radius:4px;
+      z-index:1000;
     }
-    #wrongTurn {
-      position:absolute; bottom:5px; left:5px;
-      background:red; color:white; padding:5px 10px; border-radius:4px;
-      z-index:1000; display:none;
+    #radioToggle {
+      position:absolute;
+      top:90px; right:10px;
+      background:orange;
+      color:white;
+      padding:5px 10px;
+      border-radius:4px;
+      cursor:pointer;
+      z-index:1000;
+    }
+    .voteBtn {
+      position:absolute;
+      bottom:10px;
+      padding:5px 10px;
+      background:#4285F4;
+      color:white;
+      border:none;
+      border-radius:4px;
+      cursor:pointer;
+      margin:5px;
+      z-index:1000;
+    }
+    #warn {
+      position:absolute;
+      top:130px; left:10px;
+      background:red;
+      color:white;
+      padding:5px 10px;
+      border-radius:4px;
+      display:none;
+      z-index:1000;
     }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-  <div id="modeLabel">Режим: Свободная езда</div>
+  <div id="modeLabel">Режим: Голосование</div>
   <select id="citySelect">
+    <option value="Novorossiysk">Новороссийск</option>
     <option value="Berlin">Берлин</option>
     <option value="Leipzig">Лейпциг</option>
     <option value="Dresden">Дрезден</option>
-    <option value="Novorossiysk">Новороссийск</option>
   </select>
+  <div id="voteInfo">Голосы: ←0 | ↑0 | →0</div>
   <div id="radioToggle">▶ Радио</div>
-  <div id="voteInfo">Голосование: ←0 | ↑0 | →0</div>
-  <div id="wrongTurn">Вы не туда повернули!</div>
+  <div id="warn">Вы не туда повернули!</div>
+  <button class="voteBtn" id="voteLeft" style="left:10px;">⬅ Влево</button>
+  <button class="voteBtn" id="voteStraight" style="left:100px;">⬆ Прямо</button>
+  <button class="voteBtn" id="voteRight" style="left:200px;">➡ Вправо</button>
   <div id="map"></div>
   <div id="street-view"></div>
-
 <script>
 let map, streetView;
 let radio = new Audio("https://icecast.radiohitz.club/club.mp3");
-radio.loop = true; radio.volume = 0.5;
+radio.loop = true;
+radio.volume = 0.5;
 let radioPlaying = false;
 
-let voteState = {
-  mode: "free",
-  votes: {left:0, straight:0, right:0},
-  selectedDir: null,
-  timer: null
-};
+let votes = { left:0, straight:0, right:0 };
+let votedDirection = null;
 
 const cities = {
-  Berlin: { lat:52.52, lng:13.405 },
-  Leipzig: { lat:51.34, lng:12.373 },
-  Dresden: { lat:51.05, lng:13.737 },
-  Novorossiysk: { lat:44.723, lng:37.768 }
+  Novorossiysk: { lat:44.7236, lng:37.7689 },
+  Berlin: { lat:52.5200, lng:13.4050 },
+  Leipzig: { lat:51.3397, lng:12.3731 },
+  Dresden: { lat:51.0504, lng:13.7373 }
 };
 
 function initMap() {
   map = new google.maps.Map(document.getElementById("map"), {
-    zoom:14, center: cities.Berlin
+    zoom:15,
+    center:cities.Novorossiysk
   });
+
   streetView = new google.maps.StreetViewPanorama(
-    document.getElementById("street-view"), {
-      position: cities.Berlin,
-      pov: {heading:0, pitch:0},
+    document.getElementById("street-view"),
+    {
+      position:cities.Novorossiysk,
+      pov:{heading:0,pitch:0},
       visible:true
-    });
+    }
+  );
+
   map.setStreetView(streetView);
 
-  // магазины
-  const shops = ["Рынок","Пекарня","Магазин одежды"];
-  const infoWindow = new google.maps.InfoWindow({
-    content: "Магазины: " + shops.join(", "),
-    position: cities.Berlin
-  });
-  infoWindow.open(map);
-
-  // переключение города
-  document.getElementById("citySelect").addEventListener("change", e=>{
-    const city = e.target.value;
-    map.setCenter(cities[city]);
-    streetView.setPosition(cities[city]);
+  // добавить магазины
+  const shops = [
+    { name:"Рынок", lat:44.723, lng:37.767 },
+    { name:"Пекарня", lat:44.724, lng:37.769 },
+    { name:"Магазин одежды", lat:44.725, lng:37.77 }
+  ];
+  shops.forEach(shop=>{
+    new google.maps.Marker({
+      position:{lat:shop.lat, lng:shop.lng},
+      map:map,
+      title:shop.name
+    });
   });
 }
 
-// режим
-document.getElementById("modeLabel").addEventListener("click", ()=>{
-  if (voteState.mode==="free") {
-    voteState.mode="voting";
-    document.getElementById("modeLabel").textContent="Режим: Голосование";
-    document.getElementById("voteInfo").style.display="block";
-    voteState.votes = {left:0, straight:0, right:0};
-    voteState.selectedDir = null;
+// голосование
+["voteLeft","voteStraight","voteRight"].forEach(id=>{
+  document.getElementById(id).addEventListener("click",()=>{
+    const dir = id.replace("vote","");
+    votes[dir.toLowerCase()]++;
+    updateVotes();
+  });
+});
+
+function updateVotes(){
+  document.getElementById("voteInfo").textContent = `Голосы: ←${votes.left} | ↑${votes.straight} | →${votes.right}`;
+  votedDirection = getWinner();
+}
+
+function getWinner(){
+  let max = Math.max(votes.left,votes.straight,votes.right);
+  if (max===votes.left) return "left";
+  if (max===votes.right) return "right";
+  return "straight";
+}
+
+streetView.addListener("pov_changed",()=>{
+  if(votedDirection){
+    let heading = streetView.getPov().heading;
+    let chosen = headingDirection(heading);
+    if(chosen !== votedDirection){
+      document.getElementById("warn").style.display = "block";
+    }else{
+      document.getElementById("warn").style.display = "none";
+    }
   }
-  else if (voteState.mode==="voting") {
-    voteState.mode="free";
-    document.getElementById("modeLabel").textContent="Режим: Свободная езда";
-    document.getElementById("voteInfo").style.display="none";
-    voteState.selectedDir = null;
-  }
+});
+
+function headingDirection(heading){
+  heading = (heading+360)%360;
+  if(heading>45 && heading<135) return "right";
+  if(heading>225 && heading<315) return "left";
+  return "straight";
+}
+
+// выбор города
+document.getElementById("citySelect").addEventListener("change", e=>{
+  let city = e.target.value;
+  map.setCenter(cities[city]);
+  streetView.setPosition(cities[city]);
 });
 
 // радио
-document.getElementById("radioToggle").addEventListener("click", ()=>{
-  if (radioPlaying) {
+document.getElementById("radioToggle").addEventListener("click",()=>{
+  if(radioPlaying){
     radio.pause();
+    radioPlaying = false;
     document.getElementById("radioToggle").textContent="▶ Радио";
-  } else {
+  }else{
     radio.play();
+    radioPlaying = true;
     document.getElementById("radioToggle").textContent="⏸ Радио";
   }
-  radioPlaying = !radioPlaying;
 });
 
-// голосование по стрелкам
-window.addEventListener("keydown", e=>{
-  if (voteState.mode!=="voting") return;
-
-  let dir = null;
-  if (e.key==="ArrowLeft") dir="left";
-  if (e.key==="ArrowUp") dir="straight";
-  if (e.key==="ArrowRight") dir="right";
-
-  if (dir) {
-    voteState.votes[dir]++;
-    updateVoteInfo();
-    if (!voteState.selectedDir) {
-      voteState.selectedDir=dir;
-      document.getElementById("wrongTurn").style.display="none";
-    }
+// Telegram init
+window.onload=()=>{
+  try{
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    window.telegramUserId = tg.initDataUnsafe?.user?.id || "unknown";
+  }catch(e){
+    console.log("Telegram SDK error", e);
   }
-});
-
-function updateVoteInfo() {
-  document.getElementById("voteInfo").textContent=
-    `Голосование: ←${voteState.votes.left} | ↑${voteState.votes.straight} | →${voteState.votes.right}`;
-}
-
-// обработка стрелок Google
-google.maps.event.addListenerOnce(window, "load", ()=>{
-  // имитация проверки направления (будто сверяем)
-  setInterval(()=>{
-    if (voteState.mode==="voting" && voteState.selectedDir) {
-      let heading = streetView.getPov().heading;
-      let ok=false;
-      if (voteState.selectedDir==="left" && heading<0) ok=true;
-      if (voteState.selectedDir==="straight" && heading>=0 && heading<180) ok=true;
-      if (voteState.selectedDir==="right" && heading>0) ok=true;
-
-      if (!ok) {
-        document.getElementById("wrongTurn").style.display="block";
-      } else {
-        document.getElementById("wrongTurn").style.display="none";
-      }
-    }
-  }, 2000);
-});
+};
 </script>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap" async defer></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap" async defer></script>
 </body>
 </html>
