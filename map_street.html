@@ -3,192 +3,250 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TonRoad Voting Map</title>
+<title>TonRoad Голосование</title>
 <style>
-  body { margin: 0; font-family: Arial, sans-serif; }
-  #modeSelector { margin: 5px; }
-  #status { 
-    padding: 5px; color: white; font-weight: bold; 
-    position: absolute; top: 5px; left: 5px; border-radius: 4px;
+  body {
+    margin: 0; font-family: Arial, sans-serif;
   }
-  #status.voting { background-color: red; }
-  #status.freeride { background-color: green; }
-  #votes { position: absolute; top: 40px; left: 5px; background: rgba(0,0,0,0.6); color: white; padding: 3px 8px; border-radius: 5px; font-size: 14px; }
-  #radioBtn {
-    position: absolute; top: 5px; right: 5px; background: orange; color: black; padding: 8px 12px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;
+  #map {
+    width: 100%;
+    height: 50vh;
   }
-  #streetView { width: 100vw; height: 60vh; }
+  #streetView {
+    width: 100%;
+    height: 50vh;
+  }
   #controls {
-    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
-    display: flex; gap: 10px;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin: 5px 0;
   }
-  button.voteBtn {
-    padding: 10px 15px; font-size: 16px; cursor: pointer;
-    border-radius: 6px; border: none;
+  button {
+    font-size: 18px;
+    padding: 10px 15px;
+    cursor: pointer;
   }
-  button#goBtn {
-    background-color: green; color: white; font-weight: bold;
-    padding: 10px 25px; font-size: 16px; cursor: pointer;
-    border-radius: 6px; border: none;
+  #modeStatus {
+    padding: 8px;
+    color: white;
+    font-weight: bold;
+    text-align: center;
   }
-  button.voteBtn:disabled {
-    background-color: #bbb; cursor: not-allowed;
+  #votes {
+    background-color: rgba(0,0,0,0.6);
+    color: white;
+    padding: 8px;
+    font-size: 16px;
+    position: absolute;
+    top: 55px;
+    left: 10px;
+    border-radius: 4px;
+    z-index: 5;
+  }
+  #radioBtn {
+    position: absolute;
+    top: 55px;
+    right: 10px;
+    background-color: orange;
+    border: none;
+    color: white;
+    font-size: 18px;
+    padding: 6px 12px;
+    cursor: pointer;
+    z-index: 5;
+  }
+  #modeSelect, #citySelect {
+    margin-left: 10px;
+    padding: 5px;
+    font-size: 16px;
+  }
+  #goBtn {
+    background-color: green;
+    color: white;
+    font-weight: bold;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
   }
 </style>
 </head>
 <body>
 
-<select id="modeSelector">
-  <option value="voting">Голосование</option>
+<div id="modeStatus" style="background-color:red;">Режим: Голосование</div>
+
+<select id="modeSelect" aria-label="Выбор режима">
+  <option value="voting" selected>Голосование</option>
   <option value="freeride">Свободная езда</option>
 </select>
-<div id="status" class="voting">Режим: Голосование</div>
-<div id="votes">Голосов: 0 (Влево: 0, Прямо: 0, Вправо: 0)</div>
-<button id="radioBtn">▶ Радио</button>
 
+<select id="citySelect" aria-label="Выбор города">
+  <option value="Novorossiysk" selected>Новороссийск</option>
+  <option value="Moscow">Москва</option>
+  <option value="SaintPetersburg">Санкт-Петербург</option>
+</select>
+
+<div id="votes">Влево: 0 | Прямо: 0 | Вправо: 0</div>
+<button id="radioBtn">Радио ▶</button>
+
+<div id="map"></div>
 <div id="streetView"></div>
 
 <div id="controls">
-  <button id="btnLeft" class="voteBtn">← Влево</button>
-  <button id="btnStraight" class="voteBtn">↑ Прямо</button>
-  <button id="btnRight" class="voteBtn">→ Вправо</button>
+  <button id="btnLeft">← Влево</button>
+  <button id="btnStraight">↑ Прямо</button>
+  <button id="btnRight">→ Вправо</button>
   <button id="goBtn">Ехать</button>
 </div>
 
-<script src="https://maps.googleapis.com/maps/api/js?key=ВАШ_КЛЮЧ&libraries=places"></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=ВАШ_КЛЮЧ_ЗДЕСЬ"></script>
 <script>
-  // Переменные голосования
+  let map;
+  let streetView;
+  let panorama;
+
   let voteLeft = 0;
   let voteStraight = 0;
   let voteRight = 0;
 
-  const modeSelector = document.getElementById('modeSelector');
-  const statusLabel = document.getElementById('status');
-  const votesLabel = document.getElementById('votes');
   const btnLeft = document.getElementById('btnLeft');
   const btnStraight = document.getElementById('btnStraight');
   const btnRight = document.getElementById('btnRight');
-  const btnGo = document.getElementById('goBtn');
-  const radioBtn = document.getElementById('radioBtn');
+  const goBtn = document.getElementById('goBtn');
+  const votesLabel = document.getElementById('votes');
+  const modeStatus = document.getElementById('modeStatus');
+  const modeSelect = document.getElementById('modeSelect');
+  const citySelect = document.getElementById('citySelect');
 
-  // Инициализация карты StreetView
-  const sv = new google.maps.StreetViewPanorama(document.getElementById('streetView'), {
-    position: {lat: 44.7239, lng: 37.7687}, // Новороссийск
-    pov: {heading: 0, pitch: 0},
-    visible: true,
-    linksControl: true,
-    panControl: true,
-    enableCloseButton: false
-  });
+  // Координаты для городов
+  const cities = {
+    Novorossiysk: { lat: 44.723627, lng: 37.768206 },
+    Moscow: { lat: 55.7558, lng: 37.6173 },
+    SaintPetersburg: { lat: 59.9343, lng: 30.3351 }
+  };
 
-  // Обработчик изменения режима
+  // Текущий режим
+  let currentMode = 'voting';
+
+  function updateVotesLabel() {
+    votesLabel.textContent = `Влево: ${voteLeft} | Прямо: ${voteStraight} | Вправо: ${voteRight}`;
+  }
+
   function setMode(mode) {
+    currentMode = mode;
     if (mode === 'voting') {
-      statusLabel.textContent = 'Режим: Голосование';
-      statusLabel.className = 'voting';
-      btnLeft.disabled = false;
-      btnStraight.disabled = false;
-      btnRight.disabled = false;
-      btnGo.disabled = false;
+      modeStatus.textContent = 'Режим: Голосование';
+      modeStatus.style.backgroundColor = 'red';
       btnLeft.style.display = 'inline-block';
       btnStraight.style.display = 'inline-block';
       btnRight.style.display = 'inline-block';
-      btnGo.style.display = 'inline-block';
+      goBtn.style.display = 'inline-block';
 
-      // Отключаем стрелки Google (ссылки) в режиме голосования
-      sv.setOptions({
-        linksControl: false,
-        panControl: false
-      });
-    } else if (mode === 'freeride') {
-      statusLabel.textContent = 'Режим: Свободная езда';
-      statusLabel.className = 'freeride';
+      // Отключаем стрелки Google Street View
+      streetView.setOptions({ linksControl: false, panControl: false, addressControl: false, zoomControl: false });
+
+    } else {
+      modeStatus.textContent = 'Режим: Свободная езда';
+      modeStatus.style.backgroundColor = 'green';
       btnLeft.style.display = 'none';
       btnStraight.style.display = 'none';
       btnRight.style.display = 'none';
-      btnGo.style.display = 'none';
+      goBtn.style.display = 'none';
 
-      // Включаем стрелки Google
-      sv.setOptions({
-        linksControl: true,
-        panControl: true
-      });
+      // Включаем стрелки Google Street View
+      streetView.setOptions({ linksControl: true, panControl: true, addressControl: true, zoomControl: true });
     }
+
     resetVotes();
+    updateVotesLabel();
   }
 
-  // Обновление надписи голосов
-  function updateVotesLabel() {
-    const total = voteLeft + voteStraight + voteRight;
-    votesLabel.textContent = `Голосов: ${total} (Влево: ${voteLeft}, Прямо: ${voteStraight}, Вправо: ${voteRight})`;
-  }
-
-  // Сброс голосов
   function resetVotes() {
     voteLeft = 0;
     voteStraight = 0;
     voteRight = 0;
-    updateVotesLabel();
   }
 
-  // Голосование
   function vote(direction) {
-    if (modeSelector.value !== 'voting') return;
-
-    if (direction === 'left') voteLeft++;
-    else if (direction === 'straight') voteStraight++;
-    else if (direction === 'right') voteRight++;
-
+    if (currentMode !== 'voting') return;
+    switch(direction) {
+      case 'left': voteLeft++; break;
+      case 'straight': voteStraight++; break;
+      case 'right': voteRight++; break;
+    }
     updateVotesLabel();
   }
 
-  // По нажатию Ехать едем по большинству голосов
-  function goDrive() {
-    if (modeSelector.value !== 'voting') return;
-
-    const totalVotes = voteLeft + voteStraight + voteRight;
-    if (totalVotes === 0) {
-      alert('Нет голосов для движения');
+  function go() {
+    if (currentMode !== 'voting') return;
+    if (voteLeft === 0 && voteStraight === 0 && voteRight === 0) {
+      alert("Нет голосов для движения");
       return;
     }
+    // Найти максимальное количество голосов
+    const maxVote = Math.max(voteLeft, voteStraight, voteRight);
+    let heading = streetView.getPov().heading; // текущий курс
 
-    let maxVotes = Math.max(voteLeft, voteStraight, voteRight);
-    let direction = '';
-    if (maxVotes === voteLeft) direction = 'left';
-    else if (maxVotes === voteStraight) direction = 'straight';
-    else if (maxVotes === voteRight) direction = 'right';
+    if (maxVote === voteLeft) {
+      heading -= 90;
+    } else if (maxVote === voteStraight) {
+      // оставляем как есть
+    } else if (maxVote === voteRight) {
+      heading += 90;
+    }
 
-    let heading = sv.getPov().heading;
-
-    if (direction === 'left') heading -= 90;
-    else if (direction === 'right') heading += 90;
-    // Прямо - heading без изменений
-
-    // Нормализуем heading
-    if (heading < 0) heading += 360;
-    if (heading >= 360) heading -= 360;
-
-    sv.setPov({heading: heading, pitch: 0});
-
-    resetVotes();
+    // Устанавливаем новый POV
+    streetView.setPov({ heading: heading, pitch: 0 });
   }
 
-  // Обработчики кнопок голосования
+  function initialize() {
+    const city = citySelect.value;
+    const cityCoords = cities[city];
+
+    map = new google.maps.Map(document.getElementById('map'), {
+      center: cityCoords,
+      zoom: 14,
+      streetViewControl: false
+    });
+
+    panorama = new google.maps.StreetViewPanorama(
+      document.getElementById('streetView'),
+      {
+        position: cityCoords,
+        pov: { heading: 0, pitch: 0 },
+        linksControl: false,
+        panControl: false,
+        addressControl: false,
+        zoomControl: false
+      }
+    );
+
+    map.setStreetView(panorama);
+
+    streetView = panorama;
+
+    setMode(currentMode);
+  }
+
+  // События кнопок голосования
   btnLeft.addEventListener('click', () => vote('left'));
   btnStraight.addEventListener('click', () => vote('straight'));
   btnRight.addEventListener('click', () => vote('right'));
-  btnGo.addEventListener('click', goDrive);
+  goBtn.addEventListener('click', go);
 
-  // Переключение режимов
-  modeSelector.addEventListener('change', (e) => {
-    setMode(e.target.value);
+  // Переключение режима
+  modeSelect.addEventListener('change', () => {
+    setMode(modeSelect.value);
   });
 
-  // Инициализация режима по умолчанию
-  setMode(modeSelector.value);
+  // Переключение города
+  citySelect.addEventListener('change', () => {
+    const cityCoords = cities[citySelect.value];
+    map.setCenter(cityCoords);
+    streetView.setPosition(cityCoords);
+  });
 
-  // Кнопка радио (заглушка)
-  radioBtn.addEventListener('click', () => alert('Радио пока не реализовано'));
+  window.onload = initialize;
 </script>
 
 </body>
