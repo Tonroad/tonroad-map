@@ -9,7 +9,7 @@
     #street-view { height:70%; width:100%; }
     #modeLabel {
       position: absolute; top: 10px; left: 10px;
-      background: red; color: white;
+      background: green; color: white;
       padding: 5px 10px; border-radius: 4px;
       z-index: 1000; cursor: pointer;
     }
@@ -30,27 +30,31 @@
       padding: 5px 10px; border-radius: 4px;
       cursor: pointer;
     }
-    #voteButtons {
-      position: absolute; bottom: 10px; left: 10px;
-      z-index: 1000;
-    }
-    #voteButtons button {
-      margin: 2px;
-      padding: 5px 10px;
-    }
     #directionMessage {
       position: absolute; top: 130px; left: 10px;
+      background: red; color: white;
+      padding: 5px 10px; border-radius: 4px;
       z-index: 1000;
-      background: rgba(255,0,0,0.8); color: white;
-      padding: 5px 10px;
-      border-radius: 4px;
-      display: none;
     }
+    .voteButton {
+      position: absolute;
+      bottom: 10px;
+      padding: 10px;
+      background: white;
+      color: black;
+      border: 1px solid #333;
+      border-radius: 4px;
+      cursor: pointer;
+      z-index: 1000;
+    }
+    #voteLeft { left: 10px; }
+    #voteStraight { left: 110px; }
+    #voteRight { left: 210px; }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-  <div id="modeLabel">Режим: Голосование</div>
+  <div id="modeLabel">Режим: Свободная езда</div>
   <select id="citySelect">
     <option value="Berlin">Берлин</option>
     <option value="Leipzig">Лейпциг</option>
@@ -64,15 +68,15 @@
   <div id="map"></div>
   <div id="street-view"></div>
 
-  <div id="voteButtons">
-    <button onclick="registerVote('left')">← Влево</button>
-    <button onclick="registerVote('straight')">↑ Прямо</button>
-    <button onclick="registerVote('right')">→ Вправо</button>
-  </div>
+  <button id="voteLeft" class="voteButton">← Влево</button>
+  <button id="voteStraight" class="voteButton">↑ Прямо</button>
+  <button id="voteRight" class="voteButton">→ Вправо</button>
 
 <script>
 let map, streetView;
 let currentVotes = { left: 0, right: 0, straight: 0 };
+let mode = "free";
+let lastMajorityDirection = null;
 let radio = new Audio("https://icecast.radiohitz.club/club.mp3");
 radio.loop = true; radio.volume = 0.5;
 let radioPlaying = false;
@@ -94,24 +98,29 @@ function initMap() {
     pov: { heading: 0, pitch: 0 },
     visible: true
   });
-
   map.setStreetView(streetView);
-
-  streetView.addListener("links_changed", () => {
-    let maxDir = getMajorityDirection();
-    let pov = streetView.getPov();
-    let directionTaken = "straight";
-    if (pov.heading < -30) directionTaken = "left";
-    else if (pov.heading > 30) directionTaken = "right";
-
-    if (directionTaken === maxDir) {
-      showDirectionMessage(`Вы поехали как большинство (${maxDir})`);
-    } else {
-      showDirectionMessage(`Вы поехали не как большинство (выбрали ${maxDir})`);
-    }
-    resetVotes();
-  });
 }
+
+// переключатель режимов
+document.getElementById("modeLabel").addEventListener("click", () => {
+  if (mode === "free") {
+    mode = "voting";
+    document.getElementById("modeLabel").textContent = "Режим: Голосование";
+    document.getElementById("modeLabel").style.background = "red";
+    resetVotes();
+  } else {
+    mode = "free";
+    document.getElementById("modeLabel").textContent = "Режим: Свободная езда";
+    document.getElementById("modeLabel").style.background = "green";
+    resetVotes();
+    document.getElementById("directionMessage").textContent = "";
+  }
+});
+
+// ручное голосование
+document.getElementById("voteLeft").addEventListener("click", () => handleVote("left"));
+document.getElementById("voteStraight").addEventListener("click", () => handleVote("straight"));
+document.getElementById("voteRight").addEventListener("click", () => handleVote("right"));
 
 document.getElementById("citySelect").addEventListener("change", e => {
   const city = cities[e.target.value];
@@ -121,20 +130,22 @@ document.getElementById("citySelect").addEventListener("change", e => {
   }
 });
 
-document.getElementById("modeLabel").addEventListener("click", () => {
-  const label = document.getElementById("modeLabel");
-  if (label.textContent.includes("Голосование")) {
-    label.textContent = "Режим: Свободная езда";
-    label.style.background = "green";
-  } else {
-    label.textContent = "Режим: Голосование";
-    label.style.background = "red";
-  }
-});
+function handleVote(dir) {
+  if (mode !== "voting") return;
 
-function registerVote(dir) {
   currentVotes[dir]++;
   updateVoteDisplay();
+
+  const maxDir = Object.keys(currentVotes).reduce((a,b) => currentVotes[a]>currentVotes[b]?a:b);
+  lastMajorityDirection = maxDir;
+
+  // поворот камеры
+  let pov = streetView.getPov();
+  if (maxDir === "left") pov.heading -= 45;
+  if (maxDir === "right") pov.heading += 45;
+  streetView.setPov(pov);
+
+  console.log(`голос за ${dir}, всего:`, currentVotes);
 }
 
 function updateVoteDisplay() {
@@ -147,25 +158,31 @@ function resetVotes() {
   updateVoteDisplay();
 }
 
-function getMajorityDirection() {
-  let maxVotes = 0;
-  let maxDir = "straight";
-  for (const [dir, count] of Object.entries(currentVotes)) {
-    if (count > maxVotes) {
-      maxVotes = count;
-      maxDir = dir;
+// Google стрелки обработаем через панораму
+streetView?.addListener("links_changed", () => {
+  if (mode !== "voting") return;
+
+  const links = streetView.getLinks();
+  links.forEach(link => {
+    let direction = null;
+    if (link.heading < 45 && link.heading > -45) direction = "straight";
+    else if (link.heading <= -45) direction = "left";
+    else if (link.heading >= 45) direction = "right";
+
+    if (direction && lastMajorityDirection) {
+      if (direction === lastMajorityDirection) {
+        document.getElementById("directionMessage").textContent =
+          `Вы поехали как большинство (${direction})`;
+      } else {
+        document.getElementById("directionMessage").textContent =
+          `Вы поехали не как большинство (выбрали ${lastMajorityDirection})`;
+      }
+      resetVotes();
     }
-  }
-  return maxDir;
-}
+  });
+});
 
-function showDirectionMessage(msg) {
-  const dm = document.getElementById("directionMessage");
-  dm.textContent = msg;
-  dm.style.display = "block";
-  setTimeout(() => dm.style.display = "none", 3000);
-}
-
+// радио
 document.getElementById("radioToggle").addEventListener("click", () => {
   if (radioPlaying) {
     radio.pause();
