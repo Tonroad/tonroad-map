@@ -29,6 +29,7 @@
       background: green; color: white;
       padding: 10px 20px; border-radius: 4px;
       cursor: pointer; z-index: 1000;
+      display: none;
     }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -42,18 +43,14 @@
     <option value="Novorossiysk">Новороссийск</option>
   </select>
   <div id="voteResults">Голосов: 0</div>
-  <div id="driveBtn" style="display:none;">Ехать</div>
-
+  <div id="driveBtn">Ехать</div>
   <div id="map"></div>
   <div id="street-view"></div>
 
 <script>
 let map, streetView;
-let currentVotes = { left:0, right:0, straight:0 };
+let currentVotes = { left: 0, right: 0, straight: 0 };
 let mode = "free";
-let radio = new Audio("https://icecast.radiohitz.club/club.mp3");
-radio.loop = true; radio.volume = 0.5;
-let radioPlaying = false;
 
 const cities = {
   Berlin: { lat: 52.52, lng: 13.405 },
@@ -75,7 +72,6 @@ function initMap() {
   map.setStreetView(streetView);
 }
 
-// переключение режимов
 document.getElementById("modeLabel").addEventListener("click", () => {
   if (mode === "free") {
     mode = "voting";
@@ -100,37 +96,62 @@ document.getElementById("citySelect").addEventListener("change", e => {
   }
 });
 
-// обработка голосов
-function registerVote(direction) {
+document.getElementById("driveBtn").addEventListener("click", () => {
+  const dir = getMajorityDirection();
+  movePanorama(dir);
+  showVoteResult(dir);
+  resetVotes();
+});
+
+function registerVote(dir) {
   if (mode !== "voting") return;
-  currentVotes[direction]++;
+  currentVotes[dir]++;
   updateVoteResults();
 }
 
 function updateVoteResults() {
   document.getElementById("voteResults").textContent =
-    `Влево:${currentVotes.left} Прямо:${currentVotes.straight} Вправо:${currentVotes.right}`;
+    `⬅: ${currentVotes.left}, ⬆: ${currentVotes.straight}, ➡: ${currentVotes.right}`;
 }
 
 function resetVotes() {
-  currentVotes = { left:0, right:0, straight:0 };
+  currentVotes = { left: 0, right: 0, straight: 0 };
   updateVoteResults();
 }
 
-// кнопка ЕХАТЬ
-document.getElementById("driveBtn").addEventListener("click", () => {
-  const maxDir = Object.keys(currentVotes).reduce((a,b) => currentVotes[a]>currentVotes[b]?a:b);
-  movePanorama(maxDir);
-  resetVotes();
-});
+function getMajorityDirection() {
+  let max = 0;
+  let direction = "straight";
+  for (let d in currentVotes) {
+    if (currentVotes[d] > max) {
+      max = currentVotes[d];
+      direction = d;
+    }
+  }
+  return direction;
+}
+
+function showVoteResult(dir) {
+  document.getElementById("voteResults").textContent =
+    `Поехали ${dir} как проголосовали`;
+}
 
 function movePanorama(dir) {
   let pov = streetView.getPov();
   if (dir === "left") pov.heading -= 30;
   if (dir === "right") pov.heading += 30;
-  // straight ничего не меняем
   streetView.setPov(pov);
 }
+
+// Google стрелки регистрируем как голосование
+streetView?.addListener("links_changed", () => {
+  const links = streetView.getLinks();
+  links.forEach(link => {
+    if (link.heading < 60 && link.heading > -60) registerVote("straight");
+    else if (link.heading <= -60) registerVote("left");
+    else if (link.heading >= 60) registerVote("right");
+  });
+});
 
 // Telegram
 window.onload = () => {
@@ -142,16 +163,6 @@ window.onload = () => {
     console.error("Ошибка Telegram SDK", e);
   }
 };
-
-// стрелки Google
-streetView?.addListener("links_changed", () => {
-  const links = streetView.getLinks();
-  links.forEach(link => {
-    if (link.heading < 60 && link.heading > -60) registerVote("straight");
-    else if (link.heading <= -60) registerVote("left");
-    else if (link.heading >= 60) registerVote("right");
-  });
-});
 </script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap" async defer></script>
 </body>
