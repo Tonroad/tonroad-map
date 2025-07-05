@@ -1,218 +1,154 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>TonRoad Voting & Driving</title>
-  <meta charset="utf-8" />
-  <style>
-    html, body { margin:0; padding:0; height:100%; }
-    #map { height:30%; width:100%; }
-    #street-view { height:70%; width:100%; position:relative; }
-    #modeLabel {
-      position: absolute; top: 10px; left: 10px;
-      background: red; color: white;
-      padding: 5px 10px; border-radius: 4px;
-      z-index: 1000; cursor: pointer;
-    }
-    #citySelect {
-      position: absolute; top: 10px; right: 10px;
-      z-index: 1000; padding: 5px;
-    }
-    #voteResults {
-      position: absolute; top: 50px; left: 10px;
-      background: rgba(0,0,0,0.7); color: white;
-      padding: 5px 10px; border-radius: 4px;
-      z-index: 1000;
-    }
-    #radioToggle {
-      position: absolute; top: 90px; right: 10px;
-      z-index: 1000;
-      background: orange; color: white;
-      padding: 5px 10px; border-radius: 4px;
-      cursor: pointer;
-    }
-    #goButton {
-      position: absolute; bottom: 10px; right: 10px;
-      z-index: 1000;
-      background: green; color: white;
-      padding: 10px 20px; border-radius: 4px;
-      font-weight: bold; cursor: pointer;
-      display: none;
-    }
-    #message {
-      position: absolute; top: 80px; left: 10px;
-      background: red; color: white;
-      padding: 5px 10px; border-radius: 4px;
-      z-index: 1000;
-    }
-    #voteButtons {
-      position: absolute; bottom: 10px; left: 10px;
-      z-index: 1000;
-      display: none;
-      gap: 10px;
-    }
-    #voteButtons button {
-      padding: 10px 20px;
-    }
-  </style>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-</head>
-<body>
-  <div id="modeLabel">Режим: Голосование</div>
-  <select id="citySelect">
-    <option value="Berlin">Берлин</option>
-    <option value="Leipzig">Лейпциг</option>
-    <option value="Dresden">Дрезден</option>
-    <option value="Novorossiysk">Новороссийск</option>
-  </select>
-  <div id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</div>
-  <div id="message"></div>
-  <div id="radioToggle">▶ Радио</div>
-  <div id="map"></div>
-  <div id="street-view"></div>
-  <div id="goButton">ЕХАТЬ</div>
-  <div id="voteButtons">
-    <button onclick="handleVote('left')">← Влево</button>
-    <button onclick="handleVote('straight')">↑ Прямо</button>
-    <button onclick="handleVote('right')">→ Вправо</button>
-  </div>
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Windows.Forms;
 
-<script>
-let map, streetView;
-let currentVotes = { left: 0, straight: 0, right: 0 };
-let mode = "voting";
-let radio = new Audio("https://icecast.radiohitz.club/club.mp3");
-radio.loop = true; radio.volume = 0.5;
-let radioPlaying = false;
+namespace TonRoad
+{
+    public partial class MainForm : Form
+    {
+        private enum Mode
+        {
+            FreeRide,
+            Voting
+        }
 
-const cities = {
-  Berlin: { lat: 52.52, lng: 13.405 },
-  Leipzig: { lat: 51.3397, lng: 12.3731 },
-  Dresden: { lat: 51.0504, lng: 13.7373 },
-  Novorossiysk: { lat: 44.7236, lng: 37.7689 }
-};
+        private Mode currentMode = Mode.FreeRide;
 
-function initMap() {
-  map = new google.maps.Map(document.getElementById("map"), {
-    center: cities.Berlin, zoom: 14
-  });
+        private int voteLeft = 0;
+        private int voteStraight = 0;
+        private int voteRight = 0;
 
-  streetView = new google.maps.StreetViewPanorama(document.getElementById("street-view"), {
-    position: cities.Berlin,
-    pov: { heading: 0, pitch: 0 },
-    visible: true
-  });
-  map.setStreetView(streetView);
+        private Button buttonLeft;
+        private Button buttonStraight;
+        private Button buttonRight;
+        private Button buttonGo;
+
+        private Label labelVotes;
+        private Label labelStatus;
+        private ComboBox comboMode;
+
+        public MainForm()
+        {
+            InitializeComponent();
+            InitializeVotingControls();
+            SetMode(Mode.FreeRide);
+        }
+
+        private void InitializeVotingControls()
+        {
+            buttonLeft = new Button { Text = "← Влево", Left = 50, Top = 400, Width = 100 };
+            buttonStraight = new Button { Text = "↑ Прямо", Left = 160, Top = 400, Width = 100 };
+            buttonRight = new Button { Text = "→ Вправо", Left = 270, Top = 400, Width = 100 };
+            buttonGo = new Button { Text = "ЕХАТЬ", Left = 400, Top = 400, Width = 100, BackColor = System.Drawing.Color.Green };
+
+            labelVotes = new Label { Left = 50, Top = 350, Width = 400, Height = 30 };
+            labelStatus = new Label { Left = 50, Top = 320, Width = 400, Height = 30 };
+
+            comboMode = new ComboBox { Left = 50, Top = 20, Width = 150 };
+            comboMode.Items.Add("Свободная езда");
+            comboMode.Items.Add("Голосование");
+            comboMode.SelectedIndexChanged += ComboMode_SelectedIndexChanged;
+            comboMode.SelectedIndex = 0;
+
+            buttonLeft.Click += (s, e) => Vote("left");
+            buttonStraight.Click += (s, e) => Vote("straight");
+            buttonRight.Click += (s, e) => Vote("right");
+            buttonGo.Click += (s, e) => Drive();
+
+            Controls.Add(buttonLeft);
+            Controls.Add(buttonStraight);
+            Controls.Add(buttonRight);
+            Controls.Add(buttonGo);
+            Controls.Add(labelVotes);
+            Controls.Add(labelStatus);
+            Controls.Add(comboMode);
+        }
+
+        private void ComboMode_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (comboMode.SelectedIndex == 0)
+            {
+                SetMode(Mode.FreeRide);
+            }
+            else
+            {
+                SetMode(Mode.Voting);
+            }
+        }
+
+        private void SetMode(Mode mode)
+        {
+            currentMode = mode;
+
+            if (currentMode == Mode.Voting)
+            {
+                buttonLeft.Visible = true;
+                buttonStraight.Visible = true;
+                buttonRight.Visible = true;
+                buttonGo.Visible = true;
+                labelStatus.Text = "Режим: Голосование";
+                labelStatus.BackColor = System.Drawing.Color.Red;
+            }
+            else
+            {
+                buttonLeft.Visible = false;
+                buttonStraight.Visible = false;
+                buttonRight.Visible = false;
+                buttonGo.Visible = false;
+                labelStatus.Text = "Режим: Свободная езда";
+                labelStatus.BackColor = System.Drawing.Color.Green;
+            }
+
+            UpdateVotesLabel();
+        }
+
+        private void Vote(string direction)
+        {
+            if (currentMode != Mode.Voting)
+                return;
+
+            switch (direction)
+            {
+                case "left": voteLeft++; break;
+                case "straight": voteStraight++; break;
+                case "right": voteRight++; break;
+            }
+            UpdateVotesLabel();
+        }
+
+        private void UpdateVotesLabel()
+        {
+            labelVotes.Text = $"Влево: {voteLeft} | Прямо: {voteStraight} | Вправо: {voteRight}";
+        }
+
+        private void Drive()
+        {
+            if (currentMode != Mode.Voting)
+                return;
+
+            if (voteLeft == 0 && voteStraight == 0 && voteRight == 0)
+            {
+                labelStatus.Text = "Нет голосов для движения";
+                return;
+            }
+
+            var winner = new Dictionary<string, int>
+            {
+                { "left", voteLeft },
+                { "straight", voteStraight },
+                { "right", voteRight }
+            }.OrderByDescending(x => x.Value).First();
+
+            labelStatus.Text = $"Вы поехали как большинство ({winner.Key})";
+            voteLeft = 0;
+            voteStraight = 0;
+            voteRight = 0;
+
+            UpdateVotesLabel();
+
+            // тут можно вставить логику движения машины
+            // например вызов Google Street View
+        }
+    }
 }
-
-document.getElementById("modeLabel").addEventListener("click", () => {
-  if (mode === "voting") {
-    mode = "free";
-    document.getElementById("modeLabel").textContent = "Режим: Свободная езда";
-    document.getElementById("modeLabel").style.background = "green";
-    document.getElementById("goButton").style.display = "none";
-    document.getElementById("voteButtons").style.display = "none";
-    disableGoogleArrows(false);
-    document.getElementById("message").textContent = "";
-  } else {
-    mode = "voting";
-    document.getElementById("modeLabel").textContent = "Режим: Голосование";
-    document.getElementById("modeLabel").style.background = "red";
-    resetVotes();
-    document.getElementById("goButton").style.display = "block";
-    document.getElementById("voteButtons").style.display = "flex";
-    disableGoogleArrows(true);
-    document.getElementById("message").textContent = "";
-  }
-});
-
-document.getElementById("citySelect").addEventListener("change", e => {
-  const city = cities[e.target.value];
-  if (city) {
-    map.setCenter(city);
-    streetView.setPosition(city);
-  }
-});
-
-document.getElementById("radioToggle").addEventListener("click", () => {
-  if (radioPlaying) {
-    radio.pause();
-    radioPlaying = false;
-    document.getElementById("radioToggle").textContent = "▶ Радио";
-  } else {
-    radio.play();
-    radioPlaying = true;
-    document.getElementById("radioToggle").textContent = "⏸ Радио";
-  }
-});
-
-document.getElementById("goButton").addEventListener("click", () => {
-  if (mode !== "voting") return;
-  const totalVotes = currentVotes.left + currentVotes.straight + currentVotes.right;
-  if (totalVotes === 0) {
-    document.getElementById("message").textContent = "Нет голосов для движения";
-    return;
-  }
-  const maxDir = Object.keys(currentVotes).reduce((a,b) => currentVotes[a]>currentVotes[b]?a:b);
-  movePanorama(maxDir);
-  document.getElementById("message").textContent = `Вы поехали как большинство (${maxDir})`;
-  resetVotes();
-});
-
-function handleVote(dir) {
-  if (mode !== "voting") return;
-  currentVotes[dir]++;
-  updateVoteDisplay();
-}
-
-function updateVoteDisplay() {
-  document.getElementById("voteResults").textContent =
-    `Влево: ${currentVotes.left} | Прямо: ${currentVotes.straight} | Вправо: ${currentVotes.right}`;
-}
-
-function resetVotes() {
-  currentVotes = { left: 0, straight: 0, right: 0 };
-  updateVoteDisplay();
-}
-
-function movePanorama(dir) {
-  let pov = streetView.getPov();
-  if (dir === "left") pov.heading -= 30;
-  if (dir === "right") pov.heading += 30;
-  if (dir === "straight") pov.pitch += 0; // оставляем без изменения
-  streetView.setPov(pov);
-}
-
-function disableGoogleArrows(disable) {
-  let blocker = document.getElementById("arrowBlocker");
-  if (disable) {
-    if (!blocker) {
-      blocker = document.createElement("div");
-      blocker.id = "arrowBlocker";
-      blocker.style.position = "absolute";
-      blocker.style.top = "0";
-      blocker.style.left = "0";
-      blocker.style.width = "100%";
-      blocker.style.height = "100%";
-      blocker.style.zIndex = "999";
-      blocker.style.background = "transparent";
-      blocker.style.pointerEvents = "all";
-      document.getElementById("street-view").appendChild(blocker);
-    }
-  } else {
-    if (blocker) blocker.remove();
-  }
-}
-
-window.onload = () => {
-  try {
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    window.telegramUserId = tg.initDataUnsafe?.user?.id || "unknown";
-  } catch(e){
-    console.error("Ошибка Telegram SDK", e);
-  }
-};
-</script>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap" async defer></script>
-</body>
-</html>
