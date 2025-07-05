@@ -20,46 +20,21 @@
     #citySelect {
       position: absolute;
       top: 10px;
-      left: 10px;
+      right: 10px;
       z-index: 999;
       padding: 6px;
-      font-size: 14px;
-    }
-    #controls {
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      z-index: 999;
-    }
-    #controls button {
-      margin: 2px;
-      padding: 6px 10px;
-      border: none;
       border-radius: 4px;
-      background-color: #333;
-      color: white;
-      cursor: pointer;
     }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-
-  <!-- список городов -->
   <select id="citySelect">
-    <option value="Berlin">Berlin</option>
-    <option value="Leipzig">Leipzig</option>
-    <option value="Dresden">Dresden</option>
+    <option value="">Выбрать город</option>
+    <option value="Berlin">Берлин</option>
+    <option value="Leipzig">Лейпциг</option>
+    <option value="Dresden">Дрезден</option>
   </select>
-
-  <!-- кнопки управления -->
-  <div id="controls">
-    <button onclick="moveForward()">⬆️</button>
-    <button onclick="moveBackward()">⬇️</button>
-    <button onclick="turnLeft()">⬅️</button>
-    <button onclick="turnRight()">➡️</button>
-  </div>
-
   <div id="map"></div>
   <div id="street-view"></div>
 
@@ -67,21 +42,19 @@
 let map, streetView, voteState = { currentVote:null, routeLine:null }, cityMarkers={};
 
 function initMap() {
-  const startPos = { lat: 52.5163, lng: 13.3777 }; // Unter den Linden, прямо на дороге
-
   const cities = [
-    { name:"Berlin", position:startPos, votes:0 },
-    { name:"Leipzig", position:{lat:51.3397, lng:12.3731}, votes:0 },
-    { name:"Dresden", position:{lat:51.0504, lng:13.7373}, votes:0 }
+    { name:"Berlin", position:{ lat:52.513684, lng:13.387131 }, votes:0 },
+    { name:"Leipzig", position:{ lat:51.339290, lng:12.374706 }, votes:0 },
+    { name:"Dresden", position:{ lat:51.049327, lng:13.738144 }, votes:0 }
   ];
 
   map = new google.maps.Map(document.getElementById("map"), {
-    center: startPos,
-    zoom: 17
+    center:cities[0].position,
+    zoom:14
   });
 
   streetView = new google.maps.StreetViewPanorama(document.getElementById("street-view"), {
-    position: startPos,
+    position:cities[0].position,
     pov:{heading:0, pitch:0},
     visible:true
   });
@@ -112,41 +85,15 @@ function initMap() {
     cityMarkers[city.name] = { ...city, marker, info };
   });
 
-  // выбор города
   document.getElementById("citySelect").addEventListener("change", e => {
     const cityName = e.target.value;
     const city = cityMarkers[cityName];
     if (city) {
       map.setCenter(city.position);
       streetView.setPosition(city.position);
-      streetView.setPov({ heading: 0, pitch: 0 });
+      streetView.setPov({ heading:0, pitch:0 });
     }
   });
-}
-
-// шаг вперёд
-function moveForward() {
-  const links = streetView.getLinks();
-  if (links.length > 0) {
-    streetView.setPano(links[0].pano);
-  }
-}
-// шаг назад
-function moveBackward() {
-  const links = streetView.getLinks();
-  if (links.length > 1) {
-    streetView.setPano(links[1].pano);
-  }
-}
-// поворот влево
-function turnLeft() {
-  const pov = streetView.getPov();
-  streetView.setPov({ heading: pov.heading - 20, pitch: pov.pitch });
-}
-// поворот вправо
-function turnRight() {
-  const pov = streetView.getPov();
-  streetView.setPov({ heading: pov.heading + 20, pitch: pov.pitch });
 }
 
 function registerVote(cityName) {
@@ -182,7 +129,7 @@ function registerVote(cityName) {
 function drawLineTo(destination) {
   if(voteState.routeLine) voteState.routeLine.setMap(null);
   voteState.routeLine = new google.maps.Polyline({
-    path:[{lat:52.5163, lng:13.3777}, destination],
+    path:[{lat:52.52, lng:13.405}, destination],
     geodesic:true,
     strokeColor:"#FF0000",
     strokeOpacity:1.0,
