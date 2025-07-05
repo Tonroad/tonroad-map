@@ -5,8 +5,9 @@
   <meta charset="utf-8" />
   <style>
     html, body { margin:0; padding:0; height:100%; }
-    #map { height:50%; width:100%; }
-    #street-view { height:50%; width:100%; }
+    #map { height:40%; width:100%; }
+    #street-view { height:40%; width:100%; }
+    #controls { height:20%; padding:5px; background:#f2f2f2; }
     .vote-btn {
       margin-top:5px;
       display:block;
@@ -17,35 +18,55 @@
       cursor:pointer;
       border-radius:4px;
     }
-    #citySelect {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      z-index: 999;
-      padding: 6px;
-      border-radius: 4px;
+    #citySelect, #forwardBtn, #backBtn, #radioBtn {
+      margin:4px;
+      padding:6px 10px;
+      border-radius:4px;
+      border:none;
+      cursor:pointer;
+    }
+    #places {
+      margin-top:5px;
+      font-size:14px;
+      max-height:60px;
+      overflow:auto;
     }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-  <select id="citySelect">
-    <option value="">Выбрать город</option>
-    <option value="Berlin">Берлин</option>
-    <option value="Leipzig">Лейпциг</option>
-    <option value="Dresden">Дрезден</option>
-  </select>
+  <div id="controls">
+    <select id="citySelect">
+      <option value="">Выбрать город</option>
+      <option value="Berlin">Берлин</option>
+      <option value="Leipzig">Лейпциг</option>
+      <option value="Dresden">Дрезден</option>
+      <option value="Novorossiysk">Новороссийск</option>
+    </select>
+    <button id="forwardBtn">⬆ Вперед</button>
+    <button id="backBtn">⬇ Назад</button>
+    <button id="radioBtn">▶ Радио</button>
+    <div id="places"></div>
+    <audio id="radioPlayer" src="https://stream.nightride.fm/nightride" preload="none"></audio>
+  </div>
   <div id="map"></div>
   <div id="street-view"></div>
 
 <script>
-let map, streetView, voteState = { currentVote:null, routeLine:null }, cityMarkers={};
+let map, streetView, voteState = { currentVote:null, routeLine:null }, cityMarkers={}, radioOn=false;
+const placesData = {
+  Berlin: ["магазин 1", "магазин 2", "аптека 3"],
+  Leipzig: ["супермаркет A", "булочная B"],
+  Dresden: ["ресторан X", "аптека Y", "банк Z"],
+  Novorossiysk: ["Рынок", "Пекарня", "Магазин одежды"]
+};
 
 function initMap() {
   const cities = [
     { name:"Berlin", position:{ lat:52.513684, lng:13.387131 }, votes:0 },
     { name:"Leipzig", position:{ lat:51.339290, lng:12.374706 }, votes:0 },
-    { name:"Dresden", position:{ lat:51.049327, lng:13.738144 }, votes:0 }
+    { name:"Dresden", position:{ lat:51.049327, lng:13.738144 }, votes:0 },
+    { name:"Novorossiysk", position:{ lat:44.7235, lng:37.7686 }, votes:0 }
   ];
 
   map = new google.maps.Map(document.getElementById("map"), {
@@ -92,7 +113,32 @@ function initMap() {
       map.setCenter(city.position);
       streetView.setPosition(city.position);
       streetView.setPov({ heading:0, pitch:0 });
+      // показать магазины
+      document.getElementById("places").innerHTML = "Магазины: " + (placesData[cityName] || []).join(", ");
     }
+  });
+
+  document.getElementById("forwardBtn").addEventListener("click", () => {
+    const pov = streetView.getPov();
+    streetView.setPov({ heading: pov.heading, pitch: pov.pitch });
+    streetView.moveForward && streetView.moveForward();
+  });
+
+  document.getElementById("backBtn").addEventListener("click", () => {
+    const pov = streetView.getPov();
+    streetView.setPov({ heading: pov.heading+180, pitch: pov.pitch });
+  });
+
+  document.getElementById("radioBtn").addEventListener("click", () => {
+    const player = document.getElementById("radioPlayer");
+    if (radioOn) {
+      player.pause();
+      document.getElementById("radioBtn").innerText = "▶ Радио";
+    } else {
+      player.play();
+      document.getElementById("radioBtn").innerText = "⏸ Радио";
+    }
+    radioOn = !radioOn;
   });
 }
 
