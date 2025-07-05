@@ -1,116 +1,160 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
   <title>TonRoad</title>
-  <meta charset="utf-8" />
   <style>
     html, body { margin:0; padding:0; height:100%; }
-    #map { height:33%; width:100%; }
-    #street-view { height:67%; width:100%; }
+    #map { height:30%; }
+    #pano { height:70%; }
     #modeLabel {
       position: absolute;
       top: 10px; left: 10px;
-      background: red;
-      color: white;
-      padding: 5px 10px;
-      border-radius: 4px;
-      z-index: 1000;
-      cursor: pointer;
+      background: red; color:white;
+      padding:5px 10px; z-index:1000;
+      border-radius:4px;
     }
-    #citySelect {
-      position: absolute;
-      top: 10px; right: 10px;
-      z-index: 1000;
-      padding: 5px;
+    #voteInfo {
+      position:absolute;
+      top:50px; left:10px;
+      background: rgba(0,0,0,0.6);
+      color:white;
+      padding:5px 10px;
+      z-index:1000;
+      border-radius:4px;
+    }
+    #resultMsg {
+      position:absolute;
+      top:90px; left:10px;
+      background: orange;
+      color:black;
+      padding:5px 10px;
+      z-index:1000;
+      border-radius:4px;
+      display:none;
     }
     #radioToggle {
       position: absolute;
-      top: 50px; right: 10px;
-      z-index: 1000;
+      top: 10px; right: 10px;
       background: orange;
       color: white;
       padding: 5px 10px;
       border-radius: 4px;
+      z-index: 1000;
       cursor: pointer;
-    }
-    #voteInfo {
-      position: absolute;
-      top: 50px; left: 10px;
-      background: rgba(0,0,0,0.6);
-      color: white;
-      padding: 5px 10px;
-      border-radius: 4px;
-      z-index: 1000;
-    }
-    #directionMessage {
-      position: absolute;
-      top: 100px; left: 10px;
-      background: red;
-      color: white;
-      padding: 5px 10px;
-      border-radius: 4px;
-      z-index: 1000;
-      display: none;
-    }
-    .dirBtn {
-      margin: 5px;
-      padding: 5px 10px;
-      background: #4285F4;
-      border: none;
-      color: white;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    #driveControls {
-      position: absolute;
-      bottom: 10px; left: 10px;
-      z-index: 1000;
     }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
   <div id="modeLabel">Режим: Голосование</div>
-  <select id="citySelect">
-    <option value="Berlin">Берлин</option>
-    <option value="Leipzig">Лейпциг</option>
-    <option value="Dresden">Дрезден</option>
-    <option value="Novorossiysk" selected>Новороссийск</option>
-  </select>
-  <div id="radioToggle">▶ Радио</div>
   <div id="voteInfo">Голосов: ←0 | ↑0 | →0</div>
-  <div id="directionMessage"></div>
+  <div id="resultMsg"></div>
+  <div id="radioToggle">▶ Радио</div>
   <div id="map"></div>
-  <div id="street-view"></div>
+  <div id="pano"></div>
 
 <script>
-let map, streetView;
-let voteState = { votes: {left:0, straight:0, right:0} };
+let map, pano;
 let radio = new Audio("https://icecast.radiohitz.club/club.mp3");
 radio.loop = true;
 radio.volume = 0.5;
 let radioPlaying = false;
 
-const cities = {
-  Berlin: { lat: 52.5200, lng: 13.4050 },
-  Leipzig: { lat: 51.3397, lng: 12.3731 },
-  Dresden: { lat: 51.0504, lng: 13.7373 },
-  Novorossiysk: { lat: 44.7236, lng: 37.7689 }
-};
+const votes = { left:0, straight:0, right:0 };
+let lastHeading = 0;
 
+// инициализация карты
 function initMap() {
+  const startPos = { lat:44.7236, lng:37.7689 }; // Novorossiysk
   map = new google.maps.Map(document.getElementById("map"), {
+    center: startPos,
     zoom: 14,
-    center: cities.Novorossiysk
   });
-  streetView = new google.maps.StreetViewPanorama(document.getElementById("street-view"), {
-    position: cities.Novorossiysk,
+
+  pano = new google.maps.StreetViewPanorama(document.getElementById("pano"), {
+    position: startPos,
     pov: { heading: 0, pitch: 0 },
     visible: true
   });
-  map.setStreetView(streetView);
+
+  map.setStreetView(pano);
+
+  pano.addListener("pov_changed", () => {
+    const newHeading = pano.getPov().heading;
+    checkVoteDirection(newHeading);
+    lastHeading = newHeading;
+  });
 }
 
+// голосование
+document.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft") {
+    votes.left++;
+  }
+  if (e.key === "ArrowRight") {
+    votes.right++;
+  }
+  if (e.key === "ArrowUp") {
+    votes.straight++;
+  }
+  updateVotes();
+});
+
+function updateVotes() {
+  document.getElementById("voteInfo").textContent =
+    `Голосов: ←${votes.left} | ↑${votes.straight} | →${votes.right}`;
+}
+
+// проверка после движения
+function checkVoteDirection(currentHeading) {
+  let votedDir = getMaxVote();
+  let movedDir = getMovedDir(lastHeading, currentHeading);
+  if (votedDir && movedDir) {
+    if (votedDir === movedDir) {
+      showResult("Вы поехали туда куда голосовали");
+    } else {
+      showResult("Вы не туда повернули!");
+    }
+  }
+  resetVotes();
+}
+
+function getMaxVote() {
+  let max = 0;
+  let dir = null;
+  for (let [key,val] of Object.entries(votes)) {
+    if (val > max) {
+      max = val;
+      dir = key;
+    }
+  }
+  return dir;
+}
+
+function getMovedDir(oldH, newH) {
+  const diff = newH - oldH;
+  if (Math.abs(diff) < 15) return "straight";
+  if (diff > 15) return "right";
+  if (diff < -15) return "left";
+  return null;
+}
+
+function showResult(msg) {
+  const el = document.getElementById("resultMsg");
+  el.textContent = msg;
+  el.style.display = "block";
+  setTimeout(() => { el.style.display = "none"; }, 3000);
+}
+
+function resetVotes() {
+  votes.left = 0;
+  votes.straight = 0;
+  votes.right = 0;
+  updateVotes();
+}
+
+// радио
 document.getElementById("radioToggle").addEventListener("click", () => {
   if (radioPlaying) {
     radio.pause();
@@ -123,78 +167,16 @@ document.getElementById("radioToggle").addEventListener("click", () => {
   }
 });
 
-document.getElementById("citySelect").addEventListener("change", e => {
-  const city = cities[e.target.value];
-  if (city) {
-    map.setCenter(city);
-    streetView.setPosition(city);
-    streetView.setPov({ heading: 0, pitch: 0 });
-  }
-});
-
-document.querySelector("#modeLabel").addEventListener("click", () => {
-  // оставляем режим голосования как по умолчанию
-});
-
-function updateVoteInfo() {
-  document.getElementById("voteInfo").textContent =
-    `Голосов: ←${voteState.votes.left} | ↑${voteState.votes.straight} | →${voteState.votes.right}`;
-}
-
-function getMajorityDirection() {
-  const counts = voteState.votes;
-  let max = Math.max(counts.left, counts.straight, counts.right);
-  if (max === 0) return null;
-  if (max === counts.left) return "left";
-  if (max === counts.right) return "right";
-  return "straight";
-}
-
-function showDirectionMessage(dir) {
-  const el = document.getElementById("directionMessage");
-  if (dir === "left") el.textContent = "Большинство выбрало налево — нажмите стрелку!";
-  else if (dir === "right") el.textContent = "Большинство выбрало направо — нажмите стрелку!";
-  else el.textContent = "Большинство выбрало прямо — нажмите стрелку!";
-  el.style.display = "block";
-}
-
-function hideDirectionMessage() {
-  document.getElementById("directionMessage").style.display = "none";
-}
-
-document.addEventListener("keydown", e => {
-  if (e.key.includes("Arrow")) {
-    let dir;
-    if (e.key === "ArrowLeft") dir = "left";
-    else if (e.key === "ArrowRight") dir = "right";
-    else if (e.key === "ArrowUp") dir = "straight";
-    else return;
-
-    voteState.votes[dir]++;
-    updateVoteInfo();
-
-    const major = getMajorityDirection();
-    if (major) showDirectionMessage(major);
-
-    // проверяем совпадение
-    if (dir !== major && major != null) {
-      document.getElementById("directionMessage").textContent = "Вы не туда повернули!";
-    } else if (major != null) {
-      document.getElementById("directionMessage").textContent = "Верно! Вы поехали в выбранном направлении.";
-    }
-  }
-});
-
 window.onload = function() {
   try {
     const tg = window.Telegram.WebApp;
     tg.ready();
-    window.telegramUserId = tg.initDataUnsafe?.user?.id || "unknown";
+    console.log("Telegram SDK готов");
   } catch(e) {
-    console.error("Telegram SDK error", e);
+    console.error("Telegram SDK ошибка", e);
   }
 };
 </script>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap" async defer></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=ТВОЙ_КЛЮЧ&callback=initMap" async defer></script>
 </body>
 </html>
