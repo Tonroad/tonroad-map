@@ -43,6 +43,9 @@
       z-index: 1000;
       display: none;
     }
+    #driveVotesStatus {
+      margin-top: 5px;
+    }
     .dirBtn {
       margin: 5px;
       padding: 5px 10px;
@@ -66,9 +69,12 @@
   <div id="radioToggle">▶ Радио</div>
   <div id="voteInfo">Голосование: <span id="voteStatus">0</span></div>
   <div id="driveControls">
-    <button class="dirBtn" data-dir="left">⬅ Влево</button>
-    <button class="dirBtn" data-dir="straight">⬆ Прямо</button>
-    <button class="dirBtn" data-dir="right">➡ Вправо</button>
+    <div>
+      <button class="dirBtn" data-dir="left">⬅ Влево</button>
+      <button class="dirBtn" data-dir="straight">⬆ Прямо</button>
+      <button class="dirBtn" data-dir="right">➡ Вправо</button>
+    </div>
+    <div id="driveVotesStatus">Направлений голосов пока нет</div>
   </div>
   <div id="map"></div>
   <div id="street-view"></div>
@@ -88,8 +94,6 @@ const cities = {
   Novorossiysk: { position: { lat: 44.7236, lng: 37.7689 }, votes: 0 }
 };
 
-let cityMarkers = {};
-
 function initMap() {
   map = new google.maps.Map(document.getElementById("map"), {
     zoom: 14,
@@ -104,24 +108,21 @@ function initMap() {
 
   map.setStreetView(streetView);
 
-  for (let [name, data] of Object.entries(cities)) {
-    data.votes = 0;
+  Object.entries(cities).forEach(([name, data]) => {
     const marker = new google.maps.Marker({
       position: data.position,
       map: map,
       title: name
     });
     data.marker = marker;
-    cityMarkers[name] = data;
 
     marker.addListener("click", () => {
       if (voteState.mode === "voting") {
         registerVote(name);
       }
       streetView.setPosition(data.position);
-      streetView.setPov({ heading: 0, pitch: 0 });
     });
-  }
+  });
 }
 
 function registerVote(cityName) {
@@ -165,7 +166,7 @@ function switchMode() {
     document.getElementById("modeLabel").style.background = "green";
     document.getElementById("voteInfo").style.display = "none";
     document.getElementById("driveControls").style.display = "none";
-    clearTimeout(voteState.timer);
+    clearInterval(voteState.timer);
   }
 }
 
@@ -173,19 +174,29 @@ function resetVotes() {
   voteState.votes = {};
   Object.values(cities).forEach(c => c.votes = 0);
   voteState.driveVotes = {};
+  document.getElementById("driveVotesStatus").textContent = "Направлений голосов пока нет";
 }
 
 document.getElementById("modeLabel").addEventListener("click", switchMode);
 
-// руление
 document.querySelectorAll(".dirBtn").forEach(btn => {
   btn.addEventListener("click", () => {
     if (voteState.mode !== "drivevote") return;
     const userId = window.telegramUserId || "unknown";
     if (voteState.driveVotes[userId]) return;
     voteState.driveVotes[userId] = btn.dataset.dir;
+    updateDriveVotesStatus();
   });
 });
+
+function updateDriveVotesStatus() {
+  const tally = { left:0, right:0, straight:0 };
+  Object.values(voteState.driveVotes).forEach(v => {
+    if (tally[v] !== undefined) tally[v]++;
+  });
+  document.getElementById("driveVotesStatus").textContent = 
+    `⬅:${tally.left} | ⬆:${tally.straight} | ➡:${tally.right}`;
+}
 
 function startDriveVoting() {
   if (voteState.timer) clearInterval(voteState.timer);
@@ -205,26 +216,40 @@ function startDriveVoting() {
     }
     moveStreetView(dir);
     voteState.driveVotes = {}; // reset votes
+    updateDriveVotesStatus();
   }, 5000);
 }
 
 function moveStreetView(direction) {
-  let pov = streetView.getPov();
-  if (direction === "left") {
-    pov.heading -= 30;
-  } else if (direction === "right") {
-    pov.heading += 30;
-  }
-  streetView.setPov(pov);
+  const svService = new google.maps.StreetViewService();
+  svService.getPanorama({location:streetView.getPosition(), radius:50}, (data, status) => {
+    if (status === google.maps.StreetViewStatus.OK) {
+      const links = data.links;
+      let bestLink = null;
+
+      if (links && links.length > 0) {
+        if (direction === "left") {
+          bestLink = links.reduce((prev, curr) => curr.heading < prev.heading ? curr : prev, links[0]);
+        } else if (direction === "right") {
+          bestLink = links.reduce((prev, curr) => curr.heading > prev.heading ? curr : prev, links[0]);
+        } else {
+          bestLink = links[0]; // прямо
+        }
+
+        if (bestLink) {
+          streetView.setPano(bestLink.pano);
+        }
+      }
+    }
+  });
 }
 
 document.getElementById("citySelect").addEventListener("change", e => {
   const cityName = e.target.value;
-  const city = cityMarkers[cityName];
+  const city = cities[cityName];
   if (city) {
     map.setCenter(city.position);
     streetView.setPosition(city.position);
-    streetView.setPov({ heading: 0, pitch: 0 });
   }
 });
 
@@ -244,7 +269,6 @@ window.onload = function() {
   try {
     const tg = window.Telegram.WebApp;
     tg.ready();
-    console.log("Telegram SDK инициализирован");
     window.telegramUserId = tg.initDataUnsafe?.user?.id || "unknown";
   } catch(e) {
     console.error("Ошибка Telegram SDK", e);
