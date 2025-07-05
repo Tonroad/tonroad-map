@@ -8,40 +8,33 @@
     #map { height:50%; width:100%; }
     #street-view { height:50%; width:100%; }
     #modeLabel {
-      position: absolute;
-      top: 10px; left: 10px;
-      background: green;
-      color: white;
-      padding: 5px 10px;
-      border-radius: 4px;
-      z-index: 1000;
-      cursor: pointer;
+      position: absolute; top: 10px; left: 10px;
+      background: green; color: white; padding: 5px 10px;
+      border-radius: 4px; z-index: 1000; cursor: pointer;
     }
     #citySelect {
-      position: absolute;
-      top: 10px; right: 10px;
-      z-index: 1000;
-      padding: 5px;
+      position: absolute; top: 10px; right: 10px;
+      z-index: 1000; padding: 5px;
     }
     #radioToggle {
-      position: absolute;
-      top: 50px; right: 10px;
-      z-index: 1000;
-      background: orange;
-      color: white;
-      padding: 5px 10px;
-      border-radius: 4px;
-      cursor: pointer;
+      position: absolute; top: 50px; right: 10px;
+      z-index: 1000; background: orange; color: white;
+      padding: 5px 10px; border-radius: 4px; cursor: pointer;
     }
     #voteInfo {
-      position: absolute;
-      top: 50px; left: 10px;
-      background: rgba(0,0,0,0.7);
-      color: white;
-      padding: 5px 10px;
-      border-radius: 4px;
-      z-index: 1000;
-      display: none;
+      position: absolute; top: 50px; left: 10px;
+      background: rgba(0,0,0,0.7); color: white; padding: 5px 10px;
+      border-radius: 4px; z-index: 1000; display: none;
+    }
+    #voteButtons {
+      position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+      display: none; z-index: 1000;
+    }
+    .voteBtn {
+      margin: 5px; padding: 10px 20px;
+      background: rgba(66,133,244,0.8); border: none;
+      color: white; font-size: 16px;
+      border-radius: 4px; cursor: pointer;
     }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -55,37 +48,43 @@
     <option value="Novorossiysk">Новороссийск</option>
   </select>
   <div id="radioToggle">▶ Радио</div>
-  <div id="voteInfo">Голосование: ←0 | ↑0 | →0</div>
+  <div id="voteInfo">Голосование: ← 0 | ↑ 0 | → 0</div>
+  <div id="voteButtons">
+    <button class="voteBtn" data-dir="left">⬅</button>
+    <button class="voteBtn" data-dir="straight">⬆</button>
+    <button class="voteBtn" data-dir="right">➡</button>
+  </div>
   <div id="map"></div>
   <div id="street-view"></div>
 
 <script>
 let map, streetView;
-let voteState = {
-  mode: "free",
-  votes: {left:0,straight:0,right:0},
-  timer: null
-};
 let radio = new Audio("https://icecast.radiohitz.club/club.mp3");
-radio.loop = true;
-radio.volume = 0.5;
+radio.loop = true; radio.volume = 0.5;
 let radioPlaying = false;
 
+let voteState = {
+  mode: "free",
+  votes: {left:0, straight:0, right:0},
+  timer: null
+};
+
 const cities = {
-  Berlin: { position: { lat: 52.5200, lng: 13.4050 } },
-  Leipzig: { position: { lat: 51.3397, lng: 12.3731 } },
-  Dresden: { position: { lat: 51.0504, lng: 13.7373 } },
-  Novorossiysk: { position: { lat: 44.7236, lng: 37.7689 } }
+  Berlin: { lat: 52.5200, lng: 13.4050 },
+  Leipzig: { lat: 51.3397, lng: 12.3731 },
+  Dresden: { lat: 51.0504, lng: 13.7373 },
+  Novorossiysk: { lat: 44.7236, lng: 37.7689 }
 };
 
 function initMap() {
+  const defaultCity = cities.Berlin;
+
   map = new google.maps.Map(document.getElementById("map"), {
-    zoom: 14,
-    center: cities.Berlin.position
+    center: defaultCity, zoom: 14
   });
 
   streetView = new google.maps.StreetViewPanorama(document.getElementById("street-view"), {
-    position: cities.Berlin.position,
+    position: defaultCity,
     pov: { heading: 0, pitch: 0 },
     visible: true
   });
@@ -93,28 +92,72 @@ function initMap() {
   map.setStreetView(streetView);
 }
 
-document.getElementById("modeLabel").addEventListener("click", () => {
+function updateVoteDisplay() {
+  document.getElementById("voteInfo").textContent =
+    `Голосование: ← ${voteState.votes.left} | ↑ ${voteState.votes.straight} | → ${voteState.votes.right}`;
+}
+
+function switchMode() {
   if (voteState.mode === "free") {
     voteState.mode = "voting";
-    voteState.votes = {left:0,straight:0,right:0};
     document.getElementById("modeLabel").textContent = "Режим: Голосование";
     document.getElementById("modeLabel").style.background = "red";
     document.getElementById("voteInfo").style.display = "block";
-  } else if (voteState.mode === "voting") {
+    document.getElementById("voteButtons").style.display = "block";
+    voteState.votes = {left:0, straight:0, right:0};
+    updateVoteDisplay();
+    startVoteTimer();
+  } else {
     voteState.mode = "free";
     document.getElementById("modeLabel").textContent = "Режим: Свободная езда";
     document.getElementById("modeLabel").style.background = "green";
     document.getElementById("voteInfo").style.display = "none";
-    clearInterval(voteState.timer);
+    document.getElementById("voteButtons").style.display = "none";
+    clearTimeout(voteState.timer);
   }
+}
+
+function startVoteTimer() {
+  if (voteState.timer) clearTimeout(voteState.timer);
+  voteState.timer = setTimeout(() => {
+    let max = Math.max(voteState.votes.left, voteState.votes.straight, voteState.votes.right);
+    let dir = "straight";
+    if (voteState.votes.left === max) dir = "left";
+    if (voteState.votes.right === max) dir = "right";
+    moveStreetView(dir);
+    voteState.votes = {left:0, straight:0, right:0};
+    updateVoteDisplay();
+    startVoteTimer();
+  }, 5000);
+}
+
+function moveStreetView(direction) {
+  let pov = streetView.getPov();
+  if (direction === "left") pov.heading -= 30;
+  else if (direction === "right") pov.heading += 30;
+  else pov.heading = pov.heading;
+  streetView.setPov(pov);
+  // прокрутка вперед
+  streetView.setPosition(streetView.getPosition());
+}
+
+document.querySelectorAll(".voteBtn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    if (voteState.mode !== "voting") return;
+    let dir = btn.dataset.dir;
+    voteState.votes[dir]++;
+    updateVoteDisplay();
+  });
 });
+
+document.getElementById("modeLabel").addEventListener("click", switchMode);
 
 document.getElementById("citySelect").addEventListener("change", e => {
   const cityName = e.target.value;
-  const city = cities[cityName];
-  if (city) {
-    map.setCenter(city.position);
-    streetView.setPosition(city.position);
+  const coords = cities[cityName];
+  if (coords) {
+    map.setCenter(coords);
+    streetView.setPosition(coords);
     streetView.setPov({ heading: 0, pitch: 0 });
   }
 });
@@ -131,67 +174,13 @@ document.getElementById("radioToggle").addEventListener("click", () => {
   }
 });
 
-window.addEventListener("click", (e) => {
-  if (voteState.mode !== "voting") return;
-
-  const target = e.target;
-
-  if (target.classList.contains("dirBtn")) return;
-
-  // отслеживаем нажатие по стрелкам гугл
-  const x = e.clientX;
-  const y = e.clientY;
-  const element = document.elementFromPoint(x, y);
-
-  if (element && element.tagName === "IMG" && element.src.includes("cb_scout")) {
-    let dir = "straight";
-    if (element.style.transform.includes("rotate(90")) dir = "right";
-    if (element.style.transform.includes("rotate(-90")) dir = "left";
-
-    voteState.votes[dir]++;
-    updateVoteStatus();
-
-    if (!voteState.timer) {
-      voteState.timer = setTimeout(() => {
-        let winner = "straight";
-        let maxVotes = 0;
-        for (let [d,count] of Object.entries(voteState.votes)) {
-          if (count > maxVotes) {
-            winner = d;
-            maxVotes = count;
-          }
-        }
-        moveStreetView(winner);
-        voteState.votes = {left:0,straight:0,right:0};
-        updateVoteStatus();
-        voteState.timer = null;
-      }, 5000);
-    }
-  }
-});
-
-function updateVoteStatus() {
-  document.getElementById("voteInfo").textContent =
-    `Голосование: ←${voteState.votes.left} | ↑${voteState.votes.straight} | →${voteState.votes.right}`;
-}
-
-function moveStreetView(direction) {
-  let pov = streetView.getPov();
-  if (direction === "left") {
-    pov.heading -= 30;
-  } else if (direction === "right") {
-    pov.heading += 30;
-  }
-  streetView.setPov(pov);
-}
-
 window.onload = function() {
   try {
     const tg = window.Telegram.WebApp;
     tg.ready();
     window.telegramUserId = tg.initDataUnsafe?.user?.id || "unknown";
   } catch(e) {
-    console.error("Telegram SDK init error", e);
+    console.error("Telegram SDK ошибка", e);
   }
 };
 </script>
