@@ -122,17 +122,26 @@ function initMap() {
   });
 }
 
-// движение
+// шаг вперёд
 function moveForward() {
-  streetView.setZoom(streetView.getZoom() + 0.5);
+  const links = streetView.getLinks();
+  if (links.length > 0) {
+    streetView.setPano(links[0].pano);
+  }
 }
+// шаг назад
 function moveBackward() {
-  streetView.setZoom(Math.max(streetView.getZoom() - 0.5, 0));
+  const links = streetView.getLinks();
+  if (links.length > 1) {
+    streetView.setPano(links[1].pano);
+  }
 }
+// поворот влево
 function turnLeft() {
   const pov = streetView.getPov();
   streetView.setPov({ heading: pov.heading - 20, pitch: pov.pitch });
 }
+// поворот вправо
 function turnRight() {
   const pov = streetView.getPov();
   streetView.setPov({ heading: pov.heading + 20, pitch: pov.pitch });
