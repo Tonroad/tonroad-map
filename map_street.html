@@ -49,11 +49,12 @@
 
 <script>
 let map, streetView;
-let currentVotes = { left: 0, right: 0, straight: 0 };  // словарь
+let currentVotes = { left: 0, right: 0, straight: 0 };
 let mode = "free";
 let voteTimer;
 let radio = new Audio("https://icecast.radiohitz.club/club.mp3");
-radio.loop = true; radio.volume = 0.5;
+radio.loop = true;
+radio.volume = 0.5;
 let radioPlaying = false;
 
 const cities = {
@@ -101,13 +102,11 @@ document.getElementById("citySelect").addEventListener("change", e => {
   }
 });
 
-// Google стрелки обработаем через панораму
 function handleVote(dir) {
   if (mode !== "voting") return;
 
   currentVotes[dir]++;
   updateVoteDisplay();
-
   console.log(`голос за ${dir}, текущее:`, currentVotes);
 }
 
@@ -125,6 +124,8 @@ function checkVotes() {
   const maxDir = Object.keys(currentVotes).reduce((a,b) => currentVotes[a]>currentVotes[b]?a:b);
   const votesFor = currentVotes[maxDir];
   const total = currentVotes.left + currentVotes.straight + currentVotes.right;
+
+  if (total === 0) return; // никто не голосовал
 
   if (votesFor/total >= 0.5) {
     movePanorama(maxDir);
@@ -144,10 +145,8 @@ function movePanorama(dir) {
   if (dir === "left") pov.heading -= 30;
   if (dir === "right") pov.heading += 30;
   streetView.setPov(pov);
-  // имитация движения
 }
 
-// радио
 document.getElementById("radioToggle").addEventListener("click", () => {
   if (radioPlaying) {
     radio.pause();
