@@ -36,6 +36,7 @@
       background: green; color: white;
       padding: 10px 20px; border-radius: 4px;
       font-weight: bold; cursor: pointer;
+      display: none;
     }
     #message {
       position: absolute; top: 80px; left: 10px;
@@ -46,7 +47,7 @@
     #voteButtons {
       position: absolute; bottom: 10px; left: 10px;
       z-index: 1000;
-      display: flex;
+      display: none;
       gap: 10px;
     }
     #voteButtons button {
@@ -108,18 +109,18 @@ document.getElementById("modeLabel").addEventListener("click", () => {
     mode = "free";
     document.getElementById("modeLabel").textContent = "Режим: Свободная езда";
     document.getElementById("modeLabel").style.background = "green";
-    disableGoogleArrows(false);
     document.getElementById("goButton").style.display = "none";
     document.getElementById("voteButtons").style.display = "none";
+    disableGoogleArrows(false);
     document.getElementById("message").textContent = "";
   } else {
     mode = "voting";
     document.getElementById("modeLabel").textContent = "Режим: Голосование";
     document.getElementById("modeLabel").style.background = "red";
     resetVotes();
-    disableGoogleArrows(true);
     document.getElementById("goButton").style.display = "block";
     document.getElementById("voteButtons").style.display = "flex";
+    disableGoogleArrows(true);
     document.getElementById("message").textContent = "";
   }
 });
@@ -177,6 +178,7 @@ function movePanorama(dir) {
   let pov = streetView.getPov();
   if (dir === "left") pov.heading -= 30;
   if (dir === "right") pov.heading += 30;
+  if (dir === "straight") pov.pitch += 0; // оставляем без изменения
   streetView.setPov(pov);
 }
 
