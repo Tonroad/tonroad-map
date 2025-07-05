@@ -74,7 +74,7 @@
     <option value="Leipzig">Лейпциг</option>
     <option value="Dresden">Дрезден</option>
   </select>
-  <div id="voteInfo">Голосы: ←0 | ↑0 | →0</div>
+  <div id="voteInfo">Голосы: ←0 | ↑0 | →0<br>Города: Новороссийск:0, Берлин:0, Лейпциг:0, Дрезден:0</div>
   <div id="radioToggle">▶ Радио</div>
   <div id="warn">Вы не туда повернули!</div>
   <button class="voteBtn" id="voteLeft" style="left:10px;">⬅ Влево</button>
@@ -90,7 +90,8 @@ radio.loop = true;
 radio.volume = 0.5;
 let radioPlaying = false;
 
-let votes = { left:0, straight:0, right:0 };
+let directionVotes = { left:0, straight:0, right:0 };
+let cityVotes = { Novorossiysk:0, Berlin:0, Leipzig:0, Dresden:0 };
 let votedDirection = null;
 
 const cities = {
@@ -117,39 +118,42 @@ function initMap() {
 
   map.setStreetView(streetView);
 
-  // магазины
-  const shops = [
-    { name:"Рынок", lat:44.723, lng:37.767 },
-    { name:"Пекарня", lat:44.724, lng:37.769 },
-    { name:"Магазин одежды", lat:44.725, lng:37.77 }
-  ];
-  shops.forEach(shop=>{
-    new google.maps.Marker({
-      position:{lat:shop.lat, lng:shop.lng},
+  // city markers
+  for (let city in cities) {
+    const marker = new google.maps.Marker({
+      position:cities[city],
       map:map,
-      title:shop.name
+      title:city
     });
-  });
+    marker.addListener("click",()=>{
+      cityVotes[city]++;
+      updateVoteInfo();
+      map.setCenter(cities[city]);
+      streetView.setPosition(cities[city]);
+    });
+  }
 }
 
-// голосование
+// голосование направления
 ["voteLeft","voteStraight","voteRight"].forEach(id=>{
   document.getElementById(id).addEventListener("click",()=>{
     const dir = id.replace("vote","");
-    votes[dir.toLowerCase()]++;
-    updateVotes();
+    directionVotes[dir.toLowerCase()]++;
+    votedDirection = getWinnerDirection();
+    updateVoteInfo();
   });
 });
 
-function updateVotes(){
-  document.getElementById("voteInfo").textContent = `Голосы: ←${votes.left} | ↑${votes.straight} | →${votes.right}`;
-  votedDirection = getWinner();
+function updateVoteInfo(){
+  document.getElementById("voteInfo").innerHTML =
+    `Голосы: ←${directionVotes.left} | ↑${directionVotes.straight} | →${directionVotes.right}<br>
+     Города: Новороссийск:${cityVotes.Novorossiysk}, Берлин:${cityVotes.Berlin}, Лейпциг:${cityVotes.Leipzig}, Дрезден:${cityVotes.Dresden}`;
 }
 
-function getWinner(){
-  let max = Math.max(votes.left,votes.straight,votes.right);
-  if (max===votes.left) return "left";
-  if (max===votes.right) return "right";
+function getWinnerDirection(){
+  let max = Math.max(directionVotes.left, directionVotes.straight, directionVotes.right);
+  if (max===directionVotes.left) return "left";
+  if (max===directionVotes.right) return "right";
   return "straight";
 }
 
