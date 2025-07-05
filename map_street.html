@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>TonRoad Voting & Driving</title>
+  <title>TonRoad Voting</title>
   <meta charset="utf-8" />
   <style>
     html, body { margin:0; padding:0; height:100%; }
@@ -31,6 +31,19 @@
       cursor: pointer; z-index: 1000;
       display: none;
     }
+    .voteBtn {
+      position: absolute;
+      bottom: 80px;
+      z-index: 1000;
+      padding: 5px 10px;
+      background: blue;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #leftVote { left: 10px; }
+    #straightVote { left: 50%; transform: translateX(-50%); }
+    #rightVote { right: 10px; }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -44,6 +57,12 @@
   </select>
   <div id="voteResults">Голосов: 0</div>
   <div id="driveBtn">Ехать</div>
+
+  <!-- кнопки голосования -->
+  <button class="voteBtn" id="leftVote">⬅</button>
+  <button class="voteBtn" id="straightVote">⬆</button>
+  <button class="voteBtn" id="rightVote">➡</button>
+
   <div id="map"></div>
   <div id="street-view"></div>
 
@@ -96,14 +115,12 @@ document.getElementById("citySelect").addEventListener("change", e => {
   }
 });
 
-document.getElementById("driveBtn").addEventListener("click", () => {
-  const dir = getMajorityDirection();
-  movePanorama(dir);
-  showVoteResult(dir);
-  resetVotes();
-});
+// кнопки голосования
+document.getElementById("leftVote").addEventListener("click", () => vote("left"));
+document.getElementById("straightVote").addEventListener("click", () => vote("straight"));
+document.getElementById("rightVote").addEventListener("click", () => vote("right"));
 
-function registerVote(dir) {
+function vote(dir) {
   if (mode !== "voting") return;
   currentVotes[dir]++;
   updateVoteResults();
@@ -119,6 +136,13 @@ function resetVotes() {
   updateVoteResults();
 }
 
+document.getElementById("driveBtn").addEventListener("click", () => {
+  const dir = getMajorityDirection();
+  movePanorama(dir);
+  showVoteResult(dir);
+  resetVotes();
+});
+
 function getMajorityDirection() {
   let max = 0;
   let direction = "straight";
@@ -133,7 +157,7 @@ function getMajorityDirection() {
 
 function showVoteResult(dir) {
   document.getElementById("voteResults").textContent =
-    `Поехали ${dir} как проголосовали`;
+    `Поехали ${dir}, как выбрало большинство`;
 }
 
 function movePanorama(dir) {
@@ -142,16 +166,6 @@ function movePanorama(dir) {
   if (dir === "right") pov.heading += 30;
   streetView.setPov(pov);
 }
-
-// Google стрелки регистрируем как голосование
-streetView?.addListener("links_changed", () => {
-  const links = streetView.getLinks();
-  links.forEach(link => {
-    if (link.heading < 60 && link.heading > -60) registerVote("straight");
-    else if (link.heading <= -60) registerVote("left");
-    else if (link.heading >= 60) registerVote("right");
-  });
-});
 
 // Telegram
 window.onload = () => {
