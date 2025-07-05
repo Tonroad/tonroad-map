@@ -82,6 +82,7 @@
   <button class="voteBtn" id="voteRight" style="left:200px;">➡ Вправо</button>
   <div id="map"></div>
   <div id="street-view"></div>
+
 <script>
 let map, streetView;
 let radio = new Audio("https://icecast.radiohitz.club/club.mp3");
@@ -116,7 +117,7 @@ function initMap() {
 
   map.setStreetView(streetView);
 
-  // добавить магазины
+  // магазины
   const shops = [
     { name:"Рынок", lat:44.723, lng:37.767 },
     { name:"Пекарня", lat:44.724, lng:37.769 },
@@ -191,7 +192,7 @@ document.getElementById("radioToggle").addEventListener("click",()=>{
   }
 });
 
-// Telegram init
+// Telegram
 window.onload=()=>{
   try{
     const tg = window.Telegram.WebApp;
@@ -202,6 +203,6 @@ window.onload=()=>{
   }
 };
 </script>
-<script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap" async defer></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap" async defer></script>
 </body>
 </html>
