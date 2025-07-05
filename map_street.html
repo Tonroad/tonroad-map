@@ -4,134 +4,151 @@
   <meta charset="UTF-8">
   <title>TonRoad</title>
   <style>
-    body { margin:0; font-family:sans-serif; }
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    #map {
+      height: 33%;
+      width: 100%;
+    }
+    #pano {
+      height: 67%;
+      width: 100%;
+      position: relative;
+    }
+    #controls {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999;
+    }
     #status {
       position: absolute;
-      top: 10px;
-      left: 10px;
+      top: 5px;
+      left: 5px;
       padding: 5px 10px;
-      color: white;
+      color: #fff;
       font-weight: bold;
       border-radius: 5px;
     }
-    #votes {
-      position: absolute;
-      top: 50px;
-      left: 10px;
-      background: rgba(0,0,0,0.7);
-      color: white;
-      padding: 5px 10px;
-      border-radius: 5px;
-    }
-    #voteButtons, #driveButton {
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 10px;
-    }
-    #voteButtons button {
-      font-size: 18px;
+    .vote-button {
       padding: 10px 20px;
+      margin: 5px;
+      font-size: 16px;
     }
-    #driveButton button {
-      font-size: 18px;
-      padding: 10px 20px;
+    #driveButton {
       background-color: green;
       color: white;
+      padding: 10px 20px;
+      font-size: 16px;
       border: none;
-      border-radius: 5px;
-    }
-    #blocker {
-      position: absolute;
-      top: 0; left: 0;
-      right: 0; bottom: 0;
-      background: transparent;
-      z-index: 100;
+      border-radius: 4px;
+      margin-left: 5px;
       display: none;
     }
   </style>
 </head>
 <body>
+  <div id="map"></div>
+  <div id="pano">
+    <div id="status" style="background-color: red;">Режим: Голосование</div>
+    <div id="controls">
+      <button id="left" class="vote-button">← Влево</button>
+      <button id="straight" class="vote-button">↑ Прямо</button>
+      <button id="right" class="vote-button">→ Вправо</button>
+      <button id="driveButton">ЕХАТЬ</button>
+    </div>
+  </div>
 
-<div id="status">Режим: Свободная езда</div>
-<div id="votes">Влево: 0 | Прямо: 0 | Вправо: 0</div>
-<div id="blocker"></div>
+  <script>
+    let mode = 'voting'; // or 'free'
+    let votes = {left: 0, straight: 0, right: 0};
+    let map, panorama;
 
-<div id="voteButtons">
-  <button onclick="vote('left')">← Влево</button>
-  <button onclick="vote('straight')">↑ Прямо</button>
-  <button onclick="vote('right')">→ Вправо</button>
-</div>
+    function initMap() {
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat: 44.7239, lng: 37.7689 },
+        zoom: 14
+      });
 
-<div id="driveButton" style="display:none;">
-  <button onclick="drive()">ЕХАТЬ</button>
-</div>
+      panorama = new google.maps.StreetViewPanorama(
+        document.getElementById("pano"), {
+          position: { lat: 44.7239, lng: 37.7689 },
+          pov: { heading: 165, pitch: 0 },
+          disableDefaultUI: false
+        }
+      );
+      map.setStreetView(panorama);
 
-<select id="modeSelect" style="position:absolute; top:10px; right:10px;">
-  <option value="free">Свободная езда</option>
-  <option value="voting">Голосование</option>
-</select>
+      updateMode();
 
-<iframe id="gmap" src="https://www.google.com/maps/embed?pb=!4v1642773670995!6m8!1m7!1sCAoSLEFGMVFpcE5VRDNJUUQyV3lCMEdHajFQTlNyNHFlQk9FejRwWXd5R0xaUjNR!2m2!1d44.723!2d37.768!3f0!4f0!5f0.7820865974627469"
-  width="100%" height="100%"></iframe>
+      document.getElementById("left").onclick = () => vote("left");
+      document.getElementById("straight").onclick = () => vote("straight");
+      document.getElementById("right").onclick = () => vote("right");
+      document.getElementById("driveButton").onclick = () => drive();
+    }
 
-<script>
-let mode = "free";
-let votes = {left:0, straight:0, right:0};
+    function updateMode() {
+      const status = document.getElementById("status");
+      const driveButton = document.getElementById("driveButton");
 
-document.getElementById("modeSelect").addEventListener("change", e => {
-  mode = e.target.value;
-  if (mode === "voting") {
-    document.getElementById("status").style.background = "red";
-    document.getElementById("status").textContent = "Режим: Голосование";
-    document.getElementById("voteButtons").style.display = "flex";
-    document.getElementById("driveButton").style.display = "block";
-    document.getElementById("blocker").style.display = "block"; // блокируем гугл
-  } else {
-    document.getElementById("status").style.background = "green";
-    document.getElementById("status").textContent = "Режим: Свободная езда";
-    document.getElementById("voteButtons").style.display = "none";
-    document.getElementById("driveButton").style.display = "none";
-    document.getElementById("blocker").style.display = "none"; // разблокируем гугл
-  }
-});
+      if (mode === "voting") {
+        status.textContent = "Режим: Голосование";
+        status.style.backgroundColor = "red";
+        document.getElementById("left").style.display = "";
+        document.getElementById("straight").style.display = "";
+        document.getElementById("right").style.display = "";
+        driveButton.style.display = "inline-block";
+        panorama.setOptions({clickToGo: false});
+      } else {
+        status.textContent = "Режим: Свободная езда";
+        status.style.backgroundColor = "green";
+        document.getElementById("left").style.display = "none";
+        document.getElementById("straight").style.display = "none";
+        document.getElementById("right").style.display = "none";
+        driveButton.style.display = "none";
+        panorama.setOptions({clickToGo: true});
+      }
+    }
 
-function vote(dir) {
-  if (mode !== "voting") return;
-  votes[dir]++;
-  updateVotes();
-}
+    function vote(direction) {
+      if (mode !== "voting") return;
+      votes[direction]++;
+      alert(`Вы проголосовали: ${direction}`);
+    }
 
-function updateVotes() {
-  document.getElementById("votes").textContent =
-    `Влево: ${votes.left} | Прямо: ${votes.straight} | Вправо: ${votes.right}`;
-}
+    function drive() {
+      if (mode !== "voting") return;
 
-function drive() {
-  if (mode !== "voting") return;
-  let maxVotes = Math.max(votes.left, votes.straight, votes.right);
-  let direction = '';
-  if (maxVotes === 0) {
-    document.getElementById("status").textContent = "Нет голосов для движения";
-    return;
-  }
-  if (votes.left === maxVotes) direction = "left";
-  if (votes.straight === maxVotes) direction = "straight";
-  if (votes.right === maxVotes) direction = "right";
+      let maxVotes = Math.max(votes.left, votes.straight, votes.right);
+      if (maxVotes === 0) {
+        alert("Нет голосов для движения");
+        return;
+      }
+      let winner = Object.keys(votes).find(dir => votes[dir] === maxVotes);
+      alert(`Вы поехали как большинство: ${winner}`);
 
-  document.getElementById("status").textContent = 
-    `Вы поехали как большинство (${direction})`;
+      // для примера только
+      switch (winner) {
+        case "left": panorama.setPov({heading: panorama.getPov().heading - 90, pitch: 0}); break;
+        case "right": panorama.setPov({heading: panorama.getPov().heading + 90, pitch: 0}); break;
+        case "straight": panorama.setPosition(panorama.getPosition()); break;
+      }
 
-  // имитация движения
-  alert(`Движемся ${direction.toUpperCase()}`);
+      votes = {left: 0, straight: 0, right: 0}; // сбросить
+    }
 
-  // обнуляем для следующего раунда
-  votes.left=0; votes.straight=0; votes.right=0;
-  updateVotes();
-}
-</script>
-
+    // пример переключения режима
+    function setMode(newMode) {
+      mode = newMode;
+      updateMode();
+    }
+  </script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap" async defer></script>
 </body>
 </html>
