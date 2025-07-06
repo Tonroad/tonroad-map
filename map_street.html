@@ -1,10 +1,12 @@
-<!-- index.html --><!DOCTYPE html><html lang="ru">
+<!DOCTYPE html>
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <title>TonRoad Voting & Driving</title>
-  <!-- Внешние скрипты -->
+  <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_API_KEY&callback=initApp" async defer></script>
+  <!-- Google Maps JavaScript API (ключ подставлен из твоего примера) -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initApp" async defer></script>
   <style>
     html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; }
     #map { height:30vh; width:100%; }
@@ -36,7 +38,9 @@
     <button data-dir="left">← Влево</button>
     <button data-dir="straight">↑ Прямо</button>
     <button data-dir="right">→ Вправо</button>
-  </div>  <script>
+  </div>
+
+  <script>
     class MapManager {
       constructor(mapEl, streetEl, cities) {
         this.cities = cities;
@@ -64,7 +68,6 @@
         let best = { diff: Infinity, link: null };
         links.forEach(link => {
           let rel = (link.heading - pov + 360) % 360;
-          // минимизируем круговую разницу
           let diff = Math.abs(rel - want);
           diff = Math.min(diff, 360 - diff);
           if (diff < best.diff) best = { diff, link };
@@ -89,7 +92,7 @@
           this.votes = { left: 0, straight: 0, right: 0 };
           data.forEach(v => this.votes[v.direction] = v.count);
           this.updateDisplay();
-        } catch(e) {
+        } catch (e) {
           console.error('Ошибка загрузки голосов', e);
         }
       }
@@ -98,7 +101,7 @@
         this.updateDisplay();
         try {
           await fetch(`/api/votes/${this.city}/${this.mode}?direction=${dir}`, { method: 'POST' });
-        } catch(e) {
+        } catch (e) {
           console.error('Ошибка отправки голоса', e);
         }
       }
@@ -186,7 +189,7 @@
         try {
           this.mapMgr.moveToDirection(maxDir);
           this.voteMgr.displayEl.textContent = `Вы поехали как большинство (${maxDir})`;
-        } catch(e) {
+        } catch (e) {
           console.warn(e);
           this.voteMgr.displayEl.textContent = 'Нет подходящего поворота';
         }
@@ -198,5 +201,6 @@
       Telegram.WebApp.ready();
       new AppController();
     }
-  </script></body>
+  </script>
+</body>
 </html>
