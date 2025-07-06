@@ -1,198 +1,39 @@
-<!DOCTYPE html>
-<html>
+<!-- index.html --><!DOCTYPE html><html lang="ru">
 <head>
+  <meta charset="utf-8">
   <title>TonRoad Voting & Driving</title>
-  <meta charset="utf-8" />
-  <style>
-    html, body { margin:0; padding:0; height:100%; }
-    #map { height:30%; width:100%; }
-    #street-view { height:70%; width:100%; }
-    #modeLabel {
-      position: absolute; top: 10px; left: 10px;
-      background: red; color: white;
-      padding: 5px 10px; border-radius: 4px;
-      z-index: 1000; cursor: pointer;
-    }
-    #citySelect {
-      position: absolute; top: 10px; right: 10px;
-      z-index: 1000; padding: 5px;
-    }
-    #voteResults {
-      position: absolute; top: 50px; left: 10px;
-      background: rgba(0,0,0,0.7); color: white;
-      padding: 5px 10px; border-radius: 4px;
-      z-index: 1000;
-    }
-    #radioToggle {
-      position: absolute; top: 90px; right: 10px;
-      z-index: 1000;
-      background: orange; color: white;
-      padding: 5px 10px; border-radius: 4px;
-      cursor: pointer;
-    }
-    #driveButton {
-      position: absolute; bottom: 100px; right: 10px;
-      background: green; color: white;
-      padding: 10px 15px; border-radius: 4px;
-      z-index: 1000;
-      cursor: pointer;
-    }
-  </style>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="app.js"></script>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_API_KEY&callback=initApp" async defer></script>
 </head>
 <body>
-  <div id="modeLabel">Режим: Голосование</div>
-  <select id="citySelect">
+  <div id="modeLabel" class="mode-label">Режим: Голосование</div>
+  <select id="citySelect" class="city-select">
     <option value="Berlin">Берлин</option>
     <option value="Leipzig">Лейпциг</option>
     <option value="Dresden">Дрезден</option>
     <option value="Novorossiysk">Новороссийск</option>
   </select>
-  <div id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</div>
-  <div id="radioToggle">▶ Радио</div>
-  <div id="driveButton">ЕХАТЬ</div>
-
-  <div id="map"></div>
-  <div id="street-view"></div>
-
-<script>
-let map, streetView;
-let currentVotes = { left: 0, right: 0, straight: 0 };
-let mode = "voting";
-let radio = new Audio("https://icecast.radiohitz.club/club.mp3");
-radio.loop = true; radio.volume = 0.5;
-let radioPlaying = false;
-
-const cities = {
-  Berlin: { lat: 52.52, lng: 13.405 },
-  Leipzig: { lat: 51.3397, lng: 12.3731 },
-  Dresden: { lat: 51.0504, lng: 13.7373 },
-  Novorossiysk: { lat: 44.7236, lng: 37.7689 }
-};
-
-function initMap() {
-  map = new google.maps.Map(document.getElementById("map"), {
-    center: cities.Berlin, zoom: 14
-  });
-
-  streetView = new google.maps.StreetViewPanorama(document.getElementById("street-view"), {
-    position: cities.Berlin,
-    pov: { heading: 0, pitch: 0 },
-    visible: true
-  });
-  map.setStreetView(streetView);
-}
-
-// переключение режима
-document.getElementById("modeLabel").addEventListener("click", () => {
-  if (mode === "free") {
-    mode = "voting";
-    document.getElementById("modeLabel").textContent = "Режим: Голосование";
-    document.getElementById("modeLabel").style.background = "red";
-    resetVotes();
-  } else {
-    mode = "free";
-    document.getElementById("modeLabel").textContent = "Режим: Свободная езда";
-    document.getElementById("modeLabel").style.background = "green";
-    resetVotes();
-  }
-});
-
-// выбор города
-document.getElementById("citySelect").addEventListener("change", e => {
-  const city = cities[e.target.value];
-  if (city) {
-    map.setCenter(city);
-    streetView.setPosition(city);
-  }
-});
-
-// обработка кнопок голосования
-function handleVote(dir) {
-  if (mode !== "voting") return;
-  currentVotes[dir]++;
-  updateVoteDisplay();
-}
-
-function updateVoteDisplay() {
-  document.getElementById("voteResults").textContent =
-    `Влево: ${currentVotes.left} | Прямо: ${currentVotes.straight} | Вправо: ${currentVotes.right}`;
-}
-
-function resetVotes() {
-  currentVotes = { left: 0, right: 0, straight: 0 };
-  updateVoteDisplay();
-}
-
-// кнопки голосования
-document.body.insertAdjacentHTML("beforeend", `
-  <div style="position:absolute;bottom:20px;left:10px;z-index:1000;">
-    <button onclick="handleVote('left')">← Влево</button>
-    <button onclick="handleVote('straight')">↑ Прямо</button>
-    <button onclick="handleVote('right')">→ Вправо</button>
+  <div id="voteResults" class="vote-results">Влево: 0 | Прямо: 0 | Вправо: 0</div>
+  <button id="radioToggle" class="btn radio">▶ Радио</button>
+  <button id="driveButton" class="btn drive">ЕХАТЬ</button>
+  <div id="map" class="map-container"></div>
+  <div id="street-view" class="streetview-container"></div>  <div class="vote-buttons">
+    <button data-dir="left">← Влево</button>
+    <button data-dir="straight">↑ Прямо</button>
+    <button data-dir="right">→ Вправо</button>
   </div>
-`);
-
-// кнопка ЕХАТЬ
-document.getElementById("driveButton").addEventListener("click", () => {
-  if (mode !== "voting") return;
-
-  const total = currentVotes.left + currentVotes.straight + currentVotes.right;
-  if (total === 0) {
-    document.getElementById("voteResults").textContent = "Нет голосов для движения";
-    return;
-  }
-
-  const maxDir = Object.keys(currentVotes).reduce((a,b) => currentVotes[a]>currentVotes[b]?a:b);
-  const links = streetView.getLinks();
-  let targetLink = null;
-
-  if (links && links.length > 0) {
-    // найти ближайший линк по направлению
-    targetLink = links.reduce((best, link) => {
-      if (maxDir === "straight" && Math.abs(link.heading - streetView.getPov().heading) < 45) return link;
-      if (maxDir === "left" && link.heading < streetView.getPov().heading - 45) return link;
-      if (maxDir === "right" && link.heading > streetView.getPov().heading + 45) return link;
-      return best;
-    }, null);
-
-    if (targetLink) {
-      streetView.setPano(targetLink.pano);
-      document.getElementById("voteResults").textContent = `Вы поехали как большинство (${maxDir})`;
-    } else {
-      document.getElementById("voteResults").textContent = "Нет подходящего поворота";
-    }
-  } else {
-    document.getElementById("voteResults").textContent = "Нет связей для движения";
-  }
-
-  resetVotes();
-});
-
-// радио
-document.getElementById("radioToggle").addEventListener("click", () => {
-  if (radioPlaying) {
-    radio.pause();
-    radioPlaying = false;
-    document.getElementById("radioToggle").textContent = "▶ Радио";
-  } else {
-    radio.play();
-    radioPlaying = true;
-    document.getElementById("radioToggle").textContent = "⏸ Радио";
-  }
-});
-
-window.onload = () => {
-  try {
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    window.telegramUserId = tg.initDataUnsafe?.user?.id || "unknown";
-  } catch(e){
-    console.error("Ошибка Telegram SDK", e);
-  }
-};
-
-</script>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap" async defer></script>
 </body>
-</html>
+</html>/* style.css */ html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; } .map-container { height:30vh; width:100%; } .streetview-container { height:70vh; width:100%; } .mode-label, .city-select, .vote-results, .btn { position:absolute; z-index:1000; } .mode-label { top:10px; left:10px; background:red; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; } .city-select { top:10px; right:10px; padding:5px; } .vote-results { top:50px; left:10px; background:rgba(0,0,0,0.7); color:#fff; padding:5px 10px; border-radius:4px; } .btn.radio { top:90px; right:10px; background:orange; } .btn.drive { bottom:100px; right:10px; background:green; } .vote-buttons { position:absolute; bottom:20px; left:10px; z-index:1000; } .vote-buttons button { margin-right:5px; padding:8px 12px; }
+
+// app.js class MapManager { constructor(mapEl, streetEl, cities) { this.cities = cities; this.map = new google.maps.Map(mapEl, { center: cities.Berlin, zoom: 14 }); this.streetView = new google.maps.StreetViewPanorama(streetEl, { position: cities.Berlin, pov: { heading:0, pitch:0 }, visible: true }); this.map.setStreetView(this.streetView); } setCity(cityKey) { const pos = this.cities[cityKey]; this.map.setCenter(pos); this.streetView.setPosition(pos); } moveToDirection(dir) { const pov = this.streetView.getPov().heading; const links = this.streetView.getLinks() || []; if (!links.length) throw new Error('No links'); const target = links.reduce((best, link) => { const diff = (link.heading - pov + 360) % 360; const want = dir === 'left' ? 270 : dir === 'right' ? 90 : 0; return Math.abs(diff - want) < (best.diff || 1e6) ? { link, diff: Math.abs(diff - want) } : best; }, {}).link; if (!target) throw new Error('No suitable link'); this.streetView.setPano(target.pano); } }
+
+class VoteManager { constructor(city, mode, displayEl) { this.city = city; this.mode = mode; this.displayEl = displayEl; this.votes = { left:0, straight:0, right:0 }; } async load() { const res = await fetch(/api/votes/${this.city}/${this.mode}); const data = await res.json(); data.forEach(v => this.votes[v.direction] = v.count); this.updateDisplay(); } async vote(dir) { await fetch(/api/votes/${this.city}/${this.mode}?direction=${dir}, { method:'POST' }); this.votes[dir]++; this.updateDisplay(); } updateDisplay() { this.displayEl.textContent = Влево: ${this.votes.left} | Прямо: ${this.votes.straight} | Вправо: ${this.votes.right}; } reset() { this.votes = { left:0, straight:0, right:0 }; this.updateDisplay(); } }
+
+class RadioManager { constructor(toggleEl) { this.audio = new Audio('https://icecast.radiohitz.club/club.mp3'); this.audio.loop = true; this.audio.volume = 0.5; this.playing = false; toggleEl.addEventListener('click', () => this.toggle(toggleEl)); } toggle(el) { this.playing ? this.audio.pause() : this.audio.play(); this.playing = !this.playing; el.textContent = this.playing ? '⏸ Радио' : '▶ Радио'; } }
+
+class AppController { constructor() { this.cities = { Berlin:{lat:52.52,lng:13.405}, Leipzig:{lat:51.3397,lng:12.3731}, Dresden:{lat:51.0504,lng:13.7373}, Novorossiysk:{lat:44.7236,lng:37.7689} }; this.mapMgr = new MapManager(document.getElementById('map'), document.getElementById('street-view'), this.cities); this.voteMgr = new VoteManager('Berlin', 'voting', document.getElementById('voteResults')); this.radioMgr = new RadioManager(document.getElementById('radioToggle')); this.mode = 'voting'; this.setupUI(); this.voteMgr.load(); } setupUI() { const modeLabel = document.getElementById('modeLabel'); modeLabel.addEventListener('click', () => this.toggleMode(modeLabel)); document.getElementById('citySelect').addEventListener('change', e => { this.mapMgr.setCity(e.target.value); this.voteMgr.city = e.target.value; this.voteMgr.load(); }); document.querySelectorAll('.vote-buttons button').forEach(btn => btn.addEventListener('click', async () => this.voteMgr.vote(btn.dataset.dir))); document.getElementById('driveButton').addEventListener('click', () => this.drive()); } toggleMode(label) { this.mode = this.mode === 'voting' ? 'free' : 'voting'; label.textContent = Режим: ${this.mode === 'voting' ? 'Голосование' : 'Свободная езда'}; label.style.background = this.mode === 'voting' ? 'red' : 'green'; this.voteMgr.mode = this.mode; this.voteMgr.reset(); } drive() { if (this.mode !== 'voting') return; const total = Object.values(this.voteMgr.votes).reduce((a,b)=>a+b,0); if (!total) { this.voteMgr.displayEl.textContent = 'Нет голосов для движения'; return; } const maxDir = Object.keys(this.voteMgr.votes).reduce((a,b)=>this.voteMgr.votes[a]>this.voteMgr.votes[b]?a:b); try { this.mapMgr.moveToDirection(maxDir); this.voteMgr.displayEl.textContent = Вы поехали как большинство (${maxDir}); } catch { this.voteMgr.displayEl.textContent = 'Нет подходящего поворота'; } this.voteMgr.reset(); } }
+
+function initApp() { Telegram.WebApp.ready(); new AppController(); }
+
