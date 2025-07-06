@@ -1,235 +1,233 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>TonRoad Map</title>
-    <meta charset="utf-8" />
-    <style>
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-        }
-        #map {
-            height: 100%;
-            width: 100%;
-        }
-        .vote-popup {
-            font-size: 14px;
-        }
-        .vote-btn {
-            margin-top: 5px;
-            display: block;
-            padding: 4px;
-            background-color: #4285F4;
-            color: white;
-            text-align: center;
-            cursor: pointer;
-            border-radius: 4px;
-        }
-        /* стиль для кнопок */
-        #streetBtn, #radioToggle {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            z-index: 999;
-            padding: 8px 14px;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        #radioToggle {
-            top: 50px;
-            background-color: orange;
-        }
-        #radioSelect {
-            position: absolute;
-            top: 90px;
-            right: 10px;
-            z-index: 999;
-            padding: 5px;
-            background: #fff;
-            color: #000;
-            border-radius: 4px;
-        }
-    </style>
-    <!-- Telegram MiniApp SDK -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script>
-        window.onload = function() {
-            try {
-                const tg = window.Telegram.WebApp;
-                tg.ready();
-                const initDataUnsafe = tg.initDataUnsafe;
-                window.telegramUserId = initDataUnsafe?.user?.id || "unknown";
-            } catch(e) {
-                console.error("Telegram SDK init error", e);
-            }
-        }
-    </script>
+  <title>TonRoad Map</title>
+  <meta charset="utf-8" />
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    #map {
+      height: 100%;
+      width: 100%;
+    }
+    .vote-popup {
+      font-size: 14px;
+    }
+    .vote-btn {
+      margin-top: 5px;
+      display: block;
+      padding: 4px;
+      background-color: #4285F4;
+      color: white;
+      text-align: center;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    /* кнопки */
+    #streetBtn, #radioToggle {
+      position: absolute;
+      right: 10px;
+      z-index: 999;
+      padding: 8px 14px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      color: white;
+    }
+    #streetBtn {
+      top: 10px;
+      background-color: #28a745;
+    }
+    #radioToggle {
+      top: 50px;
+      background-color: orange;
+    }
+    #radioSelect {
+      position: absolute;
+      top: 90px;
+      right: 10px;
+      z-index: 999;
+      padding: 5px;
+      background: #fff;
+      color: #000;
+      border-radius: 4px;
+    }
+  </style>
+  <!-- Telegram MiniApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    window.onload = function() {
+      try {
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        window.telegramUserId = tg.initDataUnsafe?.user?.id || "unknown";
+      } catch(e) {
+        console.error("Telegram SDK init error", e);
+      }
+    }
+  </script>
 </head>
 <body>
-    <!-- кнопка для перехода -->
-    <button id="streetBtn">Перейти в Street View</button>
+  <!-- переход в панораму -->
+  <button id="streetBtn">Перейти в Street View</button>
 
-    <!-- кнопка радио -->
-    <button id="radioToggle">▶ Радио</button>
-    <select id="radioSelect">
-      <option value="https://icecast.radiohitz.club/club.mp3">Radio Hitz</option>
-      <option value="https://dpmp.jamradio.io/stream">Jam Radio</option>
-      <option value="http://nashe1.hostingradio.ru:8000/nashe-128.mp3">Наше Радио</option>
-      <option value="https://mp3.donau3fm.at/donau3fm_high.mp3">Donau3FM</option>
-    </select>
-    <audio id="radioAudio" preload="none" style="display:none;"></audio>
+  <!-- радио -->
+  <button id="radioToggle">▶ Радио</button>
+  <select id="radioSelect">
+    <option value="https://icecast.radiohitz.club/club.mp3">Radio Hitz</option>
+    <option value="https://dpmp.jamradio.io/stream">Jam Radio</option>
+    <option value="http://nashe1.hostingradio.ru:8000/nashe-128.mp3">Наше Радио</option>
+    <option value="https://mp3.donau3fm.at/donau3fm_high.mp3">Donau3FM</option>
+  </select>
+  <audio id="radioAudio" preload="none" style="display:none;"></audio>
 
-    <div id="map"></div>
+  <!-- карта -->
+  <div id="map"></div>
 
-    <script>
-        // переход на Street View
-        document.getElementById("streetBtn").addEventListener("click", () => {
-            window.location.href = "map_street.html";
+  <!-- скрипт: радио -->
+  <script>
+    (function(){
+      const audioEl = document.getElementById("radioAudio");
+      const sel     = document.getElementById("radioSelect");
+      const btn     = document.getElementById("radioToggle");
+      let playing   = false;
+
+      audioEl.loop   = true;
+      audioEl.volume = 0.5;
+      audioEl.src    = sel.value;
+
+      sel.addEventListener("change", () => {
+        audioEl.src = sel.value;
+        if (playing) {
+          audioEl.play().catch(console.error);
+        }
+      });
+
+      btn.addEventListener("click", async () => {
+        if (playing) {
+          audioEl.pause();
+          btn.textContent = "▶ Радио";
+        } else {
+          try {
+            await audioEl.play();
+            btn.textContent = "⏸ Радио";
+          } catch(err) {
+            console.error("Ошибка запуска радио", err);
+            alert("Не удалось запустить радио: " + err.message);
+          }
+        }
+        playing = !playing;
+      });
+    })();
+  </script>
+
+  <!-- скрипт: карта и голосование -->
+  <script>
+    document.getElementById("streetBtn").addEventListener("click", () => {
+      window.location.href = "map_street.html";
+    });
+
+    let voteState = { currentVote: null, routeLine: null };
+    let map, cities, cityMarkers = {};
+
+    function initMap() {
+      cities = [
+        { name: "Berlin", position: { lat: 52.52, lng: 13.405 }, votes: 0 },
+        { name: "Leipzig", position: { lat: 51.3397, lng: 12.3731 }, votes: 0 },
+        { name: "Dresden", position: { lat: 51.0504, lng: 13.7373 }, votes: 0 }
+      ];
+
+      map = new google.maps.Map(document.getElementById("map"), {
+        zoom: 7,
+        center: cities[0].position
+      });
+
+      cities.forEach(city => {
+        const marker = new google.maps.Marker({
+          position: city.position,
+          map: map,
+          title: city.name
         });
 
-        // радио
-        (function(){
-          const audio = new Audio();
-          audio.loop = true;
-          audio.volume = 0.5;
-          const sel = document.getElementById("radioSelect");
-          sel.addEventListener("change", () => {
-            audio.src = sel.value;
-          });
-          // установить исходный поток
-          audio.src = sel.value;
+        const info = new google.maps.InfoWindow();
+        city.info = info;
+        city.marker = marker;
 
-          let playing = false;
-          document.getElementById("radioToggle").addEventListener("click", async () => {
-            if (playing) {
-              audio.pause();
-              playing = false;
-              document.getElementById("radioToggle").textContent = "▶ Радио";
-            } else {
-              try {
-                await audio.play();
-                playing = true;
-                document.getElementById("radioToggle").textContent = "⏸ Радио";
-              } catch(err) {
-                console.error("Ошибка запуска радио", err);
-                alert("Не удалось запустить радио: " + err.message);
-              }
-            }
-          });
-        })();
+        updateInfoWindow(city);
 
-        // остальной код вашей карты и голосования
-        let voteState = {
-            currentVote: null,
-            routeLine: null
-        };
+        marker.addListener("click", () => {
+          info.open(map, marker);
+        });
 
-        let map;
-        let cities;
-        let cityMarkers = {};
+        cityMarkers[city.name] = city;
+      });
+    }
 
-        function initMap() {
-            cities = [
-                { name: "Berlin", position: { lat: 52.52, lng: 13.405 }, votes: 0 },
-                { name: "Leipzig", position: { lat: 51.3397, lng: 12.3731 }, votes: 0 },
-                { name: "Dresden", position: { lat: 51.0504, lng: 13.7373 }, votes: 0 }
-            ];
+    function updateInfoWindow(city) {
+      const content = `
+        <div class="vote-popup">
+          <strong>${city.name}</strong><br />
+          <span>Голосов: ${city.votes}</span><br />
+          <div class="vote-btn" onclick="registerVote('${city.name}')">Голосовать</div>
+        </div>
+      `;
+      city.info.setContent(content);
+    }
 
-            map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 7,
-                center: cities[0].position
+    function registerVote(cityName) {
+      voteState.currentVote = cityName;
+      const userId = window.telegramUserId || "unknown";
+
+      fetch('/api/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ city: cityName, userId: userId })
+      })
+        .then(res => res.json())
+        .then(data => {
+          alert(`Голос за ${data.voted} принят сервером`);
+          const votedCity = cityMarkers[cityName];
+          if (votedCity) {
+            votedCity.votes++;
+            updateInfoWindow(votedCity);
+          }
+          if (data.winner && cityMarkers[data.winner]) {
+            Object.values(cityMarkers).forEach(c => c.marker.setLabel(null));
+            cityMarkers[data.winner].marker.setLabel({
+              text: "🏆",
+              color: "blue",
+              fontWeight: "bold"
             });
+          }
+          drawLineTo(cityMarkers[cityName].position);
+        })
+        .catch(err => {
+          alert("Ошибка отправки голоса");
+          console.error(err);
+        });
+    }
 
-            cities.forEach(city => {
-                const marker = new google.maps.Marker({
-                    position: city.position,
-                    map: map,
-                    title: city.name
-                });
+    function drawLineTo(destination) {
+      if (voteState.routeLine) voteState.routeLine.setMap(null);
+      const berlin = { lat: 52.52, lng: 13.405 };
+      voteState.routeLine = new google.maps.Polyline({
+        path: [berlin, destination],
+        geodesic: true,
+        strokeColor: "#FF0000",
+        strokeOpacity: 1.0,
+        strokeWeight: 3
+      });
+      voteState.routeLine.setMap(map);
+    }
+  </script>
 
-                const info = new google.maps.InfoWindow();
-                city.info = info;
-                city.marker = marker;
-
-                updateInfoWindow(city);
-
-                marker.addListener("click", () => {
-                    info.open(map, marker);
-                });
-
-                cityMarkers[city.name] = city;
-            });
-        }
-
-        function updateInfoWindow(city) {
-            const content = `
-                <div class="vote-popup">
-                    <strong>${city.name}</strong><br />
-                    <span>Голосов: ${city.votes}</span><br />
-                    <div class="vote-btn" onclick="registerVote('${city.name}')">Голосовать</div>
-                </div>
-            `;
-            city.info.setContent(content);
-        }
-
-        function registerVote(cityName) {
-            voteState.currentVote = cityName;
-            const userId = window.telegramUserId || "unknown";
-
-            fetch('/api/vote', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ city: cityName, userId: userId })
-            })
-                .then(res => res.json())
-                .then(data => {
-                    alert(`Голос за ${data.voted} принят сервером`);
-
-                    const votedCity = cityMarkers[cityName];
-                    if (votedCity) {
-                        votedCity.votes++;
-                        updateInfoWindow(votedCity);
-                    }
-
-                    if (data.winner && cityMarkers[data.winner]) {
-                        Object.values(cityMarkers).forEach(c => {
-                            c.marker.setLabel(null);
-                        });
-                        cityMarkers[data.winner].marker.setLabel({
-                            text: "🏆",
-                            color: "blue",
-                            fontWeight: "bold"
-                        });
-                    }
-
-                    drawLineTo(cityMarkers[cityName].position);
-                })
-                .catch(err => {
-                    alert("Ошибка отправки голоса");
-                    console.error(err);
-                });
-        }
-
-        function drawLineTo(destination) {
-            if (voteState.routeLine) voteState.routeLine.setMap(null);
-            const berlin = { lat: 52.52, lng: 13.405 };
-            voteState.routeLine = new google.maps.Polyline({
-                path: [berlin, destination],
-                geodesic: true,
-                strokeColor: "#FF0000",
-                strokeOpacity: 1.0,
-                strokeWeight: 3
-            });
-            voteState.routeLine.setMap(map);
-        }
-    </script>
-    <script
-        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap"
-        async defer>
-    </script>
+  <!-- Google Maps API -->
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap"
+    async defer>
+  </script>
 </body>
 </html>
