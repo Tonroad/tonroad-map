@@ -5,19 +5,20 @@
   <title>TonRoad Voting & Driving</title>
   <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <!-- Google Maps JavaScript API (ключ подставлен из твоего примера) -->
+  <!-- Google Maps JavaScript API -->
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initApp" async defer></script>
   <style>
     html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; }
     #map { height:30vh; width:100%; }
-    #street-view { height:70vh; width:100%; }
-    .mode-label, #citySelect, #voteResults, #radioToggle, #driveButton { position:absolute; z-index:1000; }
+    #street-view { height:70vh; width:100%; position:relative; }
+    .street-overlay { position:absolute; top:0; left:0; width:100%; height:100%; z-index:1001; background:rgba(255,255,255,0); display:none; }
+    .mode-label, #citySelect, #voteResults, #radioToggle, #driveButton { position:absolute; z-index:1002; }
     .mode-label { top:10px; left:10px; background:red; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; }
     #citySelect { top:10px; right:10px; padding:5px; }
     #voteResults { top:50px; left:10px; background:rgba(0,0,0,0.7); color:#fff; padding:5px 10px; border-radius:4px; }
     #radioToggle { top:90px; right:10px; background:orange; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; }
     #driveButton { bottom:100px; right:10px; background:green; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
-    .vote-buttons { position:absolute; bottom:20px; left:10px; z-index:1000; }
+    .vote-buttons { position:absolute; bottom:20px; left:10px; z-index:1002; }
     .vote-buttons button { margin-right:5px; padding:8px 12px; }
   </style>
 </head>
@@ -32,8 +33,13 @@
   <div id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</div>
   <button id="radioToggle">▶ Радио</button>
   <button id="driveButton">ЕХАТЬ</button>
+
   <div id="map"></div>
-  <div id="street-view"></div>
+
+  <div id="street-view">
+    <div id="streetOverlay" class="street-overlay"></div>
+  </div>
+
   <div class="vote-buttons">
     <button data-dir="left">← Влево</button>
     <button data-dir="straight">↑ Прямо</button>
@@ -44,27 +50,30 @@
     class MapManager {
       constructor(mapEl, streetEl, cities) {
         this.cities = cities;
-        this.map = new google.maps.Map(mapEl, { center: cities.Berlin, zoom: 14 });
-        this.streetView = new google.maps.StreetViewPanorama(streetEl, {
+        this.panorama = new google.maps.StreetViewPanorama(streetEl, {
           position: cities.Berlin,
           pov: { heading: 0, pitch: 0 },
-          visible: true
+          visible: true,
+          clickToGo: true,
+          linksControl: true
         });
-        this.map.setStreetView(this.streetView);
+        this.map = new google.maps.Map(mapEl, { center: cities.Berlin, zoom: 14 });
+        this.map.setStreetView(this.panorama);
       }
       setCity(cityKey) {
         const pos = this.cities[cityKey];
         this.map.setCenter(pos);
-        this.streetView.setPosition(pos);
+        this.panorama.setPosition(pos);
+      }
+      setInteraction(enabled) {
+        this.panorama.setOptions({ clickToGo: enabled, linksControl: enabled });
       }
       moveToDirection(dir) {
-        const pov = this.streetView.getPov().heading;
-        const links = this.streetView.getLinks() || [];
+        const pov = this.panorama.getPov().heading;
+        const links = this.panorama.getLinks() || [];
         if (!links.length) throw new Error('Нет связей для движения');
-
         const wantAngles = { straight: 0, left: 270, right: 90 };
         const want = wantAngles[dir];
-
         let best = { diff: Infinity, link: null };
         links.forEach(link => {
           let rel = (link.heading - pov + 360) % 360;
@@ -72,9 +81,8 @@
           diff = Math.min(diff, 360 - diff);
           if (diff < best.diff) best = { diff, link };
         });
-
         if (!best.link) throw new Error('Нет подходящего поворота');
-        this.streetView.setPano(best.link.pano);
+        this.panorama.setPano(best.link.pano);
       }
     }
 
@@ -119,14 +127,20 @@
         this.audio = new Audio('https://icecast.radiohitz.club/club.mp3');
         this.audio.loop = true;
         this.audio.volume = 0.5;
-        toggleEl.addEventListener('click', () => {
-          if (this.audio.paused) {
-            this.audio.play().catch(e => console.warn('Радио заблокировано', e));
-          } else {
-            this.audio.pause();
-          }
-          toggleEl.textContent = this.audio.paused ? '▶ Радио' : '⏸ Радио';
-        });
+        toggleEl.addEventListener('click', () => this.toggle(toggleEl));
+      }
+      toggle(el) {
+        if (this.audio.paused) {
+          this.audio.play().then(() => {
+            el.textContent = '⏸ Радио';
+          }).catch(err => {
+            console.error('Ошибка запуска радио', err);
+            alert('Не удалось запустить радио: ' + err.message);
+          });
+        } else {
+          this.audio.pause();
+          el.textContent = '▶ Радио';
+        }
       }
     }
 
@@ -151,23 +165,22 @@
         this.radioMgr = new RadioManager(
           document.getElementById('radioToggle')
         );
+        this.overlay = document.getElementById('streetOverlay');
         this.setupUI();
         this.voteMgr.load();
+        this.updateOverlay();
       }
       setupUI() {
         const modeLabel = document.getElementById('modeLabel');
         modeLabel.addEventListener('click', () => this.toggleMode(modeLabel));
-
         document.getElementById('citySelect').addEventListener('change', async e => {
           this.mapMgr.setCity(e.target.value);
           this.voteMgr.city = e.target.value;
           await this.voteMgr.load();
         });
-
         document.querySelectorAll('.vote-buttons button').forEach(btn =>
           btn.addEventListener('click', () => this.voteMgr.vote(btn.dataset.dir))
         );
-
         document.getElementById('driveButton').addEventListener('click', () => this.drive());
       }
       toggleMode(label) {
@@ -176,6 +189,12 @@
         label.style.background = this.mode === 'voting' ? 'red' : 'green';
         this.voteMgr.mode = this.mode;
         this.voteMgr.reset();
+        this.updateOverlay();
+      }
+      updateOverlay() {
+        const enabled = this.mode !== 'voting';
+        this.overlay.style.display = enabled ? 'none' : 'block';
+        this.mapMgr.setInteraction(enabled);
       }
       drive() {
         if (this.mode !== 'voting') return;
