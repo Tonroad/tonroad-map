@@ -3,83 +3,46 @@
 <head>
   <meta charset="utf-8" />
   <title>TonRoad Map</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <style>
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      font-family: Arial, sans-serif;
-    }
-    #map {
-      height: 100%;
-      width: 100%;
-    }
-    .vote-popup {
-      font-size: 14px;
-    }
-    .vote-btn {
-      margin-top: 5px;
-      display: block;
-      padding: 4px;
-      background-color: #4285F4;
-      color: white;
-      text-align: center;
-      cursor: pointer;
-      border-radius: 4px;
-    }
+    html, body { height:100%; margin:0; padding:0; font-family:Arial,sans-serif }
+    #map { height:100%; width:100%; }
+    .vote-popup { font-size:14px; }
+    .vote-btn { margin-top:5px; padding:4px; background:#4285F4; color:#fff; border-radius:4px; cursor:pointer; text-align:center }
     /* кнопки */
-    #radioToggle, #streetBtn {
-      position: absolute;
-      right: 10px;
-      z-index: 999;
-      padding: 8px 14px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      color: #fff;
+    #radioToggle, #streetBtn, #driveBtn {
+      position:absolute; right:10px; z-index:999;
+      padding:8px 14px; border:none; border-radius:4px;
+      cursor:pointer; color:#fff;
     }
-    #radioToggle {
-      top: 10px;
-      background-color: orange;
-    }
-    #streetBtn {
-      top: 50px;
-      background-color: #28a745;
-    }
+    #radioToggle { top:10px; background:orange; }
+    #streetBtn   { top:50px; background:#28a745; }
+    #driveBtn    { bottom:10px; background:green; }
   </style>
-  <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
-    window.onload = function() {
-      try {
-        const tg = window.Telegram.WebApp;
-        tg.ready();
-        window.telegramUserId = tg.initDataUnsafe?.user?.id || "unknown";
-      } catch(e) {
-        console.error("Telegram SDK init error", e);
-      }
-    }
+    window.onload = () => {
+      Telegram.WebApp.ready();
+      window.telegramUserId = Telegram.WebApp.initDataUnsafe?.user?.id || 'unknown';
+    };
   </script>
 </head>
 <body>
-  <!-- Кнопка ▶/⏸ для радио (Europe Plus) -->
+  <!-- Радио одна станция (HTTPS!) -->
   <button id="radioToggle">▶ Радио</button>
-  <!-- Встроенный аудио-плеер -->
   <audio id="radioAudio"
-         src="http://air.radiorecord.ru:8102/europaplus.ogg"
-         loop preload="none"
-         style="display:none;">
-  </audio>
+         src="https://icecast.radiohitz.club/club.mp3"
+         loop preload="none" style="display:none;"></audio>
 
-  <!-- Кнопка перехода в Street View -->
+  <!-- Кнопки перехода и ЕХАТЬ -->
   <button id="streetBtn">Перейти в Street View</button>
+  <button id="driveBtn">ЕХАТЬ</button>
 
-  <!-- Контейнер карты -->
+  <!-- Карта -->
   <div id="map"></div>
 
-  <!-- Скрипт: управление радио -->
   <script>
+    // Управление радио
     (function(){
       const audioEl = document.getElementById('radioAudio');
       const btn     = document.getElementById('radioToggle');
@@ -104,113 +67,73 @@
         playing = !playing;
       });
     })();
-  </script>
 
-  <!-- Скрипт: карта и голосование -->
-  <script>
-    // переход на map_street.html
+    // Переход в панораму
     document.getElementById('streetBtn').addEventListener('click', () => {
       window.location.href = 'map_street.html';
     });
 
-    let voteState = { currentVote: null, routeLine: null };
-    let map, cities, cityMarkers = {};
+    // Логика карты и голосования
+    let voteState = { currentVote:null, routeLine:null }, map, cities, cityMarkers={};
 
-    function initMap() {
+    function initMap(){
       cities = [
-        { name: "Berlin",  position: { lat: 52.52,   lng: 13.405 }, votes: 0 },
-        { name: "Leipzig", position: { lat: 51.3397, lng: 12.3731 }, votes: 0 },
-        { name: "Dresden", position: { lat: 51.0504, lng: 13.7373 }, votes: 0 }
+        { name:"Berlin",  position:{lat:52.52,lng:13.405}, votes:0 },
+        { name:"Leipzig", position:{lat:51.3397,lng:12.3731}, votes:0 },
+        { name:"Dresden", position:{lat:51.0504,lng:13.7373}, votes:0 }
       ];
-
-      map = new google.maps.Map(document.getElementById("map"), {
-        zoom: 7,
-        center: cities[0].position
-      });
-
-      cities.forEach(city => {
-        const marker = new google.maps.Marker({
-          position: city.position,
-          map: map,
-          title: city.name
-        });
-
-        const info = new google.maps.InfoWindow();
-        city.info = info;
-        city.marker = marker;
-
-        updateInfoWindow(city);
-
-        marker.addListener("click", () => {
-          info.open(map, marker);
-        });
-
-        cityMarkers[city.name] = city;
+      map = new google.maps.Map(document.getElementById("map"), { zoom:7, center:cities[0].position });
+      cities.forEach(c=>{
+        const m = new google.maps.Marker({ position:c.position, map, title:c.name });
+        const iw = new google.maps.InfoWindow();
+        c.marker = m; c.info=iw;
+        updateInfoWindow(c);
+        m.addListener('click',()=>iw.open(map,m));
+        cityMarkers[c.name]=c;
       });
     }
 
-    function updateInfoWindow(city) {
-      const content = `
+    function updateInfoWindow(city){
+      city.info.setContent(`
         <div class="vote-popup">
           <strong>${city.name}</strong><br/>
-          <span>Голосов: ${city.votes}</span><br/>
+          Голосов: ${city.votes}<br/>
           <div class="vote-btn" onclick="registerVote('${city.name}')">Голосовать</div>
-        </div>
-      `;
-      city.info.setContent(content);
+        </div>`);
     }
 
-    function registerVote(cityName) {
-      voteState.currentVote = cityName;
-      const userId = window.telegramUserId || "unknown";
-
-      fetch('/api/vote', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ city: cityName, userId: userId })
+    function registerVote(name){
+      voteState.currentVote=name;
+      const userId = window.telegramUserId;
+      fetch('/api/vote',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({city:name,userId})
       })
-      .then(res => res.json())
-      .then(data => {
-        alert(`Голос за ${data.voted} принят сервером`);
-        const votedCity = cityMarkers[cityName];
-        if (votedCity) {
-          votedCity.votes++;
-          updateInfoWindow(votedCity);
+      .then(r=>r.json())
+      .then(data=>{
+        alert(`Голос за ${data.voted} принят`);
+        cityMarkers[name].votes++;
+        updateInfoWindow(cityMarkers[name]);
+        if(data.winner){
+          Object.values(cityMarkers).forEach(c=>c.marker.setLabel(null));
+          cityMarkers[data.winner].marker.setLabel({text:'🏆',color:'blue',fontWeight:'bold'});
         }
-        if (data.winner && cityMarkers[data.winner]) {
-          Object.values(cityMarkers).forEach(c => c.marker.setLabel(null));
-          cityMarkers[data.winner].marker.setLabel({
-            text: "🏆",
-            color: "blue",
-            fontWeight: "bold"
-          });
-        }
-        drawLineTo(cityMarkers[cityName].position);
+        drawLineTo(cityMarkers[name].position);
       })
-      .catch(err => {
-        alert("Ошибка отправки голоса");
-        console.error(err);
-      });
+      .catch(e=>{alert('Ошибка отправки');console.error(e);});
     }
 
-    function drawLineTo(destination) {
-      if (voteState.routeLine) voteState.routeLine.setMap(null);
-      const berlin = { lat: 52.52, lng: 13.405 };
-      voteState.routeLine = new google.maps.Polyline({
-        path: [berlin, destination],
-        geodesic: true,
-        strokeColor: "#FF0000",
-        strokeOpacity: 1.0,
-        strokeWeight: 3
+    function drawLineTo(dest){
+      if(voteState.routeLine) voteState.routeLine.setMap(null);
+      voteState.routeLine=new google.maps.Polyline({
+        path:[{lat:52.52,lng:13.405},dest],
+        geodesic:true,strokeColor:'#F00',strokeOpacity:1,strokeWeight:3
       });
       voteState.routeLine.setMap(map);
     }
   </script>
 
-  <!-- Google Maps API -->
-  <script
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap"
-    async defer>
-  </script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap" async defer></script>
 </body>
 </html>
