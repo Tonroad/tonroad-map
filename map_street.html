@@ -37,6 +37,14 @@
   </select>
   <div id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</div>
   <button id="radioToggle">▶ Радио</button>
+  <!-- Выбор радиостанции -->
+  <select id="radioSelect" style="position:absolute; top:130px; right:10px; z-index:1002;">
+    <option value="https://icecast.radiohitz.club/club.mp3">Radio Hitz</option>
+    <option value="https://dpmp.jamradio.io/stream">Jam Radio</option>
+    <option value="http://icstream.showcastmedia.com:80/8000/live">DFM Россия</option>
+    <option value="http://nashe1.hostingradio.ru:8000/nashe-128.mp3">Наше Радио</option>
+    <option value="https://mp3.donau3fm.at/donau3fm_high.mp3">Donau3FM (Austria)</option>
+  </select>
   <button id="driveButton">ЕХАТЬ</button>  <!-- Скрытый аудиоэлемент -->  <audio id="radioAudio" preload="none" style="display:none;">
     <source src="https://icecast.radiohitz.club/club.mp3" type="audio/mpeg">
   </audio>  <div id="map"></div>
