@@ -1,5 +1,4 @@
-<!DOCTYPE html>
-<html lang="ru">
+<!DOCTYPE html><html lang="ru">
 <head>
   <meta charset="utf-8">
   <title>TonRoad Voting & Driving</title>
@@ -13,46 +12,19 @@
     #street-view { height:70vh; width:100%; position:relative; }
     .street-overlay {
       position:absolute; top:0; left:0;
-      width:100%; height:100%;
-      z-index:1001;
-      background:rgba(255,255,255,0);
-      display:none;
+      width:100%; height:100%; z-index:1001;
+      background:rgba(255,255,255,0); display:none;
     }
     .mode-label, #citySelect, #voteResults, #radioToggle, #driveButton {
       position:absolute; z-index:1002;
     }
-    .mode-label {
-      top:10px; left:10px;
-      background:red; color:#fff;
-      padding:5px 10px; border-radius:4px;
-      cursor:pointer;
-    }
-    #citySelect {
-      top:10px; right:10px; padding:5px;
-    }
-    #voteResults {
-      top:50px; left:10px;
-      background:rgba(0,0,0,0.7); color:#fff;
-      padding:5px 10px; border-radius:4px;
-    }
-    #radioToggle {
-      top:90px; right:10px;
-      background:orange; color:#fff;
-      padding:5px 10px; border-radius:4px;
-      cursor:pointer;
-    }
-    #driveButton {
-      bottom:100px; right:10px;
-      background:green; color:#fff;
-      padding:10px 15px; border-radius:4px;
-      cursor:pointer;
-    }
-    .vote-buttons {
-      position:absolute; bottom:20px; left:10px; z-index:1002;
-    }
-    .vote-buttons button {
-      margin-right:5px; padding:8px 12px;
-    }
+    .mode-label { top:10px; left:10px; background:red; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; }
+    #citySelect { top:10px; right:10px; padding:5px; }
+    #voteResults { top:50px; left:10px; background:rgba(0,0,0,0.7); color:#fff; padding:5px 10px; border-radius:4px; }
+    #radioToggle { top:90px; right:10px; background:orange; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; }
+    #driveButton { bottom:100px; right:10px; background:green; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
+    .vote-buttons { position:absolute; bottom:20px; left:10px; z-index:1002; }
+    .vote-buttons button { margin-right:5px; padding:8px 12px; }
   </style>
 </head>
 <body>
@@ -65,25 +37,16 @@
   </select>
   <div id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</div>
   <button id="radioToggle">▶ Радио</button>
-  <button id="driveButton">ЕХАТЬ</button>
-
-  <!-- Скрытый аудиоэлемент -->
-  <audio id="radioAudio" preload="none" style="display:none;">
+  <button id="driveButton">ЕХАТЬ</button>  <!-- Скрытый аудиоэлемент -->  <audio id="radioAudio" preload="none" style="display:none;">
     <source src="https://icecast.radiohitz.club/club.mp3" type="audio/mpeg">
-  </audio>
-
-  <div id="map"></div>
+  </audio>  <div id="map"></div>
   <div id="street-view">
     <div id="streetOverlay" class="street-overlay"></div>
-  </div>
-
-  <div class="vote-buttons">
+  </div>  <div class="vote-buttons">
     <button data-dir="left">← Влево</button>
     <button data-dir="straight">↑ Прямо</button>
     <button data-dir="right">→ Вправо</button>
-  </div>
-
-  <script>
+  </div>  <script>
     class MapManager {
       constructor(mapEl, streetEl, cities) {
         this.cities = cities;
@@ -94,10 +57,7 @@
           clickToGo: true,
           linksControl: true
         });
-        this.map = new google.maps.Map(mapEl, {
-          center: cities.Berlin,
-          zoom: 14
-        });
+        this.map = new google.maps.Map(mapEl, { center: cities.Berlin, zoom: 14 });
         this.map.setStreetView(this.panorama);
       }
       setCity(cityKey) {
@@ -106,12 +66,9 @@
         this.panorama.setPosition(pos);
       }
       setInteraction(enabled) {
-        this.panorama.setOptions({
-          clickToGo: enabled,
-          linksControl: enabled
-        });
+        this.panorama.setOptions({ clickToGo: enabled, linksControl: enabled });
       }
-      moveToDirection(dir) {
+      findBestLink(dir) {
         const pov = this.panorama.getPov().heading;
         const links = this.panorama.getLinks() || [];
         if (!links.length) throw new Error('Нет связей для движения');
@@ -125,7 +82,16 @@
           if (diff < best.diff) best = { diff, link };
         });
         if (!best.link) throw new Error('Нет подходящего поворота');
-        this.panorama.setPano(best.link.pano);
+        return best.link;
+      }
+      rotateAndMove(dir) {
+        const link = this.findBestLink(dir);
+        // сначала поворачиваем взгляд
+        this.panorama.setPov({ heading: link.heading, pitch: 0 });
+        // затем едем вперед по той же ссылке через полсекунды
+        setTimeout(() => {
+          this.panorama.setPano(link.pano);
+        }, 500);
       }
     }
 
@@ -151,9 +117,7 @@
         this.votes[dir]++;
         this.updateDisplay();
         try {
-          await fetch(`/api/votes/${this.city}/${this.mode}?direction=${dir}`, {
-            method: 'POST'
-          });
+          await fetch(`/api/votes/${this.city}/${this.mode}?direction=${dir}`, { method: 'POST' });
         } catch (e) {
           console.error('Ошибка отправки голоса', e);
         }
@@ -175,14 +139,15 @@
         this.audio.volume = 0.5;
         toggleEl.addEventListener('click', () => this.toggle(toggleEl));
       }
-      toggle(el) {
+      async toggle(el) {
         if (this.audio.paused) {
-          this.audio.play().then(() => {
+          try {
+            await this.audio.play();
             el.textContent = '⏸ Радио';
-          }).catch(err => {
+          } catch (err) {
             console.error('Ошибка запуска радио', err);
             alert('Не удалось запустить радио: ' + err.message);
-          });
+          }
         } else {
           this.audio.pause();
           el.textContent = '▶ Радио';
@@ -219,31 +184,20 @@
       setupUI() {
         const modeLabel = document.getElementById('modeLabel');
         modeLabel.addEventListener('click', () => this.toggleMode(modeLabel));
-        document
-          .getElementById('citySelect')
-          .addEventListener('change', async e => {
-            this.mapMgr.setCity(e.target.value);
-            this.voteMgr.city = e.target.value;
-            await this.voteMgr.load();
-          });
-        document
-          .querySelectorAll('.vote-buttons button')
-          .forEach(btn =>
-            btn.addEventListener('click', () =>
-              this.voteMgr.vote(btn.dataset.dir)
-            )
-          );
-        document
-          .getElementById('driveButton')
-          .addEventListener('click', () => this.drive());
+        document.getElementById('citySelect').addEventListener('change', async e => {
+          this.mapMgr.setCity(e.target.value);
+          this.voteMgr.city = e.target.value;
+          await this.voteMgr.load();
+        });
+        document.querySelectorAll('.vote-buttons button').forEach(btn =>
+          btn.addEventListener('click', () => this.voteMgr.vote(btn.dataset.dir))
+        );
+        document.getElementById('driveButton').addEventListener('click', () => this.drive());
       }
       toggleMode(label) {
         this.mode = this.mode === 'voting' ? 'free' : 'voting';
-        label.textContent = `Режим: ${
-          this.mode === 'voting' ? 'Голосование' : 'Свободная езда'
-        }`;
-        label.style.background =
-          this.mode === 'voting' ? 'red' : 'green';
+        label.textContent = `Режим: ${this.mode === 'voting' ? 'Голосование' : 'Свободная езда'}`;
+        label.style.background = this.mode === 'voting' ? 'red' : 'green';
         this.voteMgr.mode = this.mode;
         this.voteMgr.reset();
         this.updateOverlay();
@@ -255,26 +209,21 @@
       }
       drive() {
         if (this.mode !== 'voting') return;
-        const total = Object.values(this.voteMgr.votes).reduce(
-          (a, b) => a + b,
-          0
-        );
+        const total = Object.values(this.voteMgr.votes).reduce((a, b) => a + b, 0);
         if (total === 0) {
-          this.voteMgr.displayEl.textContent =
-            'Нет голосов для движения';
+          this.voteMgr.displayEl.textContent = 'Нет голосов для движения';
           return;
         }
-        const maxDir = Object.keys(this.voteMgr.votes).reduce(
-          (a, b) =>
-            this.voteMgr.votes[a] > this.voteMgr.votes[b] ? a : b
+        const maxDir = Object.keys(this.voteMgr.votes).reduce((a, b) =>
+          this.voteMgr.votes[a] > this.voteMgr.votes[b] ? a : b
         );
         try {
-          this.mapMgr.moveToDirection(maxDir);
+          // поворот и движение
+          this.mapMgr.rotateAndMove(maxDir);
           this.voteMgr.displayEl.textContent = `Вы поехали как большинство (${maxDir})`;
         } catch (e) {
           console.warn(e);
-          this.voteMgr.displayEl.textContent =
-            'Нет подходящего поворота';
+          this.voteMgr.displayEl.textContent = 'Нет подходящего поворота';
         }
         this.voteMgr.reset();
       }
@@ -284,6 +233,5 @@
       Telegram.WebApp.ready();
       new AppController();
     }
-  </script>
-</body>
+  </script></body>
 </html>
