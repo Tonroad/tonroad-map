@@ -7,7 +7,7 @@
   <!-- Google Maps JavaScript API -->
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initApp" async defer></script>
   <style>
-    html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; }
+    html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; background: #2c3e50; color: #ecf0f1; }
     #map { height:30vh; width:100%; }
     #street-view { height:70vh; width:100%; position:relative; }
     .street-overlay {
@@ -15,16 +15,44 @@
       width:100%; height:100%; z-index:1001;
       background:rgba(255,255,255,0); display:none;
     }
-    .mode-label, #citySelect, #voteResults, #radioToggle, #driveButton {
+    .mode-label, #citySelect, #voteResults, #radioToggle, #driveButton, #radioSelect {
       position:absolute; z-index:1002;
     }
-    .mode-label { top:10px; left:10px; background:red; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; }
-    #citySelect { top:10px; right:10px; padding:5px; }
-    #voteResults { top:50px; left:10px; background:rgba(0,0,0,0.7); color:#fff; padding:5px 10px; border-radius:4px; }
-    #radioToggle { top:90px; right:10px; background:orange; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; }
-    #driveButton { bottom:100px; right:10px; background:green; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
-    .vote-buttons { position:absolute; bottom:20px; left:10px; z-index:1002; }
-    .vote-buttons button { margin-right:5px; padding:8px 12px; }
+    .mode-label {
+      top:10px; left:10px;
+      background:red; color:#fff;
+      padding:5px 10px; border-radius:4px;
+      cursor:pointer;
+    }
+    #citySelect {
+      top:10px; right:10px; padding:5px;
+    }
+    #voteResults {
+      top:50px; left:10px;
+      background:rgba(0,0,0,0.7); color:#fff;
+      padding:5px 10px; border-radius:4px;
+    }
+    #radioToggle {
+      top:90px; right:10px;
+      background:orange; color:#fff;
+      padding:5px 10px; border-radius:4px;
+      cursor:pointer;
+    }
+    #radioSelect {
+      top:130px; right:10px; padding:5px; background:#fff; color:#000;
+    }
+    #driveButton {
+      bottom:100px; right:10px;
+      background:green; color:#fff;
+      padding:10px 15px; border-radius:4px;
+      cursor:pointer;
+    }
+    .vote-buttons {
+      position:absolute; bottom:20px; left:10px; z-index:1002;
+    }
+    .vote-buttons button {
+      margin-right:5px; padding:8px 12px;
+    }
   </style>
 </head>
 <body>
@@ -37,8 +65,7 @@
   </select>
   <div id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</div>
   <button id="radioToggle">▶ Радио</button>
-  <!-- Выбор радиостанции -->
-  <select id="radioSelect" style="position:absolute; top:130px; right:10px; z-index:1002;">
+  <select id="radioSelect">
     <option value="https://icecast.radiohitz.club/club.mp3">Radio Hitz</option>
     <option value="https://dpmp.jamradio.io/stream">Jam Radio</option>
     <option value="http://icstream.showcastmedia.com:80/8000/live">DFM Россия</option>
@@ -92,12 +119,8 @@
       }
       rotateAndMove(dir) {
         const link = this.findBestLink(dir);
-        // сначала поворачиваем взгляд
         this.panorama.setPov({ heading: link.heading, pitch: 0 });
-        // затем едем вперед по той же ссылке через полсекунды
-        setTimeout(() => {
-          this.panorama.setPano(link.pano);
-        }, 500);
+        setTimeout(() => this.panorama.setPano(link.pano), 500);
       }
     }
 
@@ -145,25 +168,10 @@
       }
       openRadio() {
         const url = this.selectEl.value;
-        if (window.Telegram && Telegram.WebApp && Telegram.WebApp.openLink) {
+        if (window.Telegram?.WebApp?.openLink) {
           Telegram.WebApp.openLink(url);
         } else {
           window.open(url, '_blank');
-        }
-      }
-    }
-      async toggle(el) {
-        if (this.audio.paused) {
-          try {
-            await this.audio.play();
-            el.textContent = '⏸ Радио';
-          } catch (err) {
-            console.error('Ошибка запуска радио', err);
-            alert('Не удалось запустить радио: ' + err.message);
-          }
-        } else {
-          this.audio.pause();
-          el.textContent = '▶ Радио';
         }
       }
     }
@@ -183,8 +191,7 @@
           this.cities
         );
         this.voteMgr = new VoteManager(
-          'Berlin', 'voting',
-          document.getElementById('voteResults')
+          'Berlin', 'voting', document.getElementById('voteResults')
         );
         this.radioMgr = new RadioManager(
           document.getElementById('radioToggle'),
@@ -232,7 +239,6 @@
           this.voteMgr.votes[a] > this.voteMgr.votes[b] ? a : b
         );
         try {
-          // поворот и движение
           this.mapMgr.rotateAndMove(maxDir);
           this.voteMgr.displayEl.textContent = `Вы поехали как большинство (${maxDir})`;
         } catch (e) {
