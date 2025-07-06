@@ -9,7 +9,6 @@
     #map { height:100%; width:100%; }
     .vote-popup { font-size:14px; }
     .vote-btn { margin-top:5px; padding:4px; background:#4285F4; color:#fff; border-radius:4px; cursor:pointer; text-align:center }
-    /* кнопки */
     #radioToggle, #streetBtn, #driveBtn {
       position:absolute; right:10px; z-index:999;
       padding:8px 14px; border:none; border-radius:4px;
@@ -28,13 +27,16 @@
   </script>
 </head>
 <body>
-  <!-- Радио одна станция (HTTPS!) -->
+  <!-- Кнопка для радио -->
   <button id="radioToggle">▶ Радио</button>
+
+  <!-- Аудиоплеер (скрытый) -->
   <audio id="radioAudio"
          src="https://icecast.radiohitz.club/club.mp3"
-         loop preload="none" style="display:none;"></audio>
+         loop preload="none"
+         style="display:none;"></audio>
 
-  <!-- Кнопки перехода и ЕХАТЬ -->
+  <!-- Кнопки перехода -->
   <button id="streetBtn">Перейти в Street View</button>
   <button id="driveBtn">ЕХАТЬ</button>
 
@@ -42,13 +44,11 @@
   <div id="map"></div>
 
   <script>
-    // Управление радио
+    // управление радио
     (function(){
       const audioEl = document.getElementById('radioAudio');
       const btn     = document.getElementById('radioToggle');
       let playing   = false;
-
-      // Установим громкость
       audioEl.volume = 0.5;
 
       btn.addEventListener('click', async () => {
@@ -60,20 +60,20 @@
             await audioEl.play();
             btn.textContent = '⏸ Радио';
           } catch(err) {
-            console.error('Не удалось запустить радио', err);
-            alert('Ошибка запуска радио: ' + err.message);
+            console.error('Ошибка запуска радио', err);
+            alert('Не удалось запустить радио: ' + err.message);
           }
         }
         playing = !playing;
       });
     })();
 
-    // Переход в панораму
+    // переход на панораму
     document.getElementById('streetBtn').addEventListener('click', () => {
       window.location.href = 'map_street.html';
     });
 
-    // Логика карты и голосования
+    // голосование
     let voteState = { currentVote:null, routeLine:null }, map, cities, cityMarkers={};
 
     function initMap(){
@@ -133,7 +133,6 @@
       voteState.routeLine.setMap(map);
     }
   </script>
-
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap" async defer></script>
 </body>
 </html>
