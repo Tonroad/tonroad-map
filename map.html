@@ -39,17 +39,14 @@
   <div id="map"></div>
 
   <script>
-    // кнопка Музыка
     document.getElementById('musicBtn').addEventListener('click', () => {
       Telegram.WebApp.openTelegramLink("https://t.me/fmusbot");
     });
 
-    // переход на панораму
     document.getElementById('streetBtn').addEventListener('click', () => {
       window.location.href = 'map_street.html';
     });
 
-    // голосование
     let voteState = { currentVote:null, routeLine:null }, map, cities, cityMarkers={};
 
     function initMap(){
@@ -67,6 +64,12 @@
         m.addListener('click',()=>iw.open(map,m));
         cityMarkers[c.name]=c;
       });
+
+      // восстановление выбора
+      const savedCity = localStorage.getItem("selectedCity");
+      if(savedCity && cityMarkers[savedCity]){
+        google.maps.event.trigger(cityMarkers[savedCity].marker, 'click');
+      }
     }
 
     function updateInfoWindow(city){
@@ -80,6 +83,7 @@
 
     function registerVote(name){
       voteState.currentVote=name;
+      localStorage.setItem("selectedCity", name);  // сохранить
       const userId = window.telegramUserId;
       fetch('/api/vote',{
         method:'POST',
@@ -108,6 +112,14 @@
       });
       voteState.routeLine.setMap(map);
     }
+
+    // при возвращении
+    window.addEventListener('focus', () => {
+      const savedCity = localStorage.getItem("selectedCity");
+      if(savedCity && cityMarkers[savedCity]){
+        google.maps.event.trigger(cityMarkers[savedCity].marker, 'click');
+      }
+    });
   </script>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap" async defer></script>
 </body>
