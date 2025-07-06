@@ -26,9 +26,8 @@
             cursor: pointer;
             border-radius: 4px;
         }
-
-        /* стиль для кнопки перехода */
-        #streetBtn {
+        /* стиль для кнопок */
+        #streetBtn, #radioToggle {
             position: absolute;
             top: 10px;
             right: 10px;
@@ -40,6 +39,20 @@
             border-radius: 4px;
             cursor: pointer;
         }
+        #radioToggle {
+            top: 50px;
+            background-color: orange;
+        }
+        #radioSelect {
+            position: absolute;
+            top: 90px;
+            right: 10px;
+            z-index: 999;
+            padding: 5px;
+            background: #fff;
+            color: #000;
+            border-radius: 4px;
+        }
     </style>
     <!-- Telegram MiniApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -48,12 +61,8 @@
             try {
                 const tg = window.Telegram.WebApp;
                 tg.ready();
-                console.log("Telegram WebApp SDK initialized");
-
                 const initDataUnsafe = tg.initDataUnsafe;
                 window.telegramUserId = initDataUnsafe?.user?.id || "unknown";
-                console.log("User ID:", window.telegramUserId);
-
             } catch(e) {
                 console.error("Telegram SDK init error", e);
             }
@@ -64,13 +73,56 @@
     <!-- кнопка для перехода -->
     <button id="streetBtn">Перейти в Street View</button>
 
+    <!-- кнопка радио -->
+    <button id="radioToggle">▶ Радио</button>
+    <select id="radioSelect">
+      <option value="https://icecast.radiohitz.club/club.mp3">Radio Hitz</option>
+      <option value="https://dpmp.jamradio.io/stream">Jam Radio</option>
+      <option value="http://nashe1.hostingradio.ru:8000/nashe-128.mp3">Наше Радио</option>
+      <option value="https://mp3.donau3fm.at/donau3fm_high.mp3">Donau3FM</option>
+    </select>
+    <audio id="radioAudio" preload="none" style="display:none;"></audio>
+
     <div id="map"></div>
 
     <script>
+        // переход на Street View
         document.getElementById("streetBtn").addEventListener("click", () => {
             window.location.href = "map_street.html";
         });
 
+        // радио
+        (function(){
+          const audio = new Audio();
+          audio.loop = true;
+          audio.volume = 0.5;
+          const sel = document.getElementById("radioSelect");
+          sel.addEventListener("change", () => {
+            audio.src = sel.value;
+          });
+          // установить исходный поток
+          audio.src = sel.value;
+
+          let playing = false;
+          document.getElementById("radioToggle").addEventListener("click", async () => {
+            if (playing) {
+              audio.pause();
+              playing = false;
+              document.getElementById("radioToggle").textContent = "▶ Радио";
+            } else {
+              try {
+                await audio.play();
+                playing = true;
+                document.getElementById("radioToggle").textContent = "⏸ Радио";
+              } catch(err) {
+                console.error("Ошибка запуска радио", err);
+                alert("Не удалось запустить радио: " + err.message);
+              }
+            }
+          });
+        })();
+
+        // остальной код вашей карты и голосования
         let voteState = {
             currentVote: null,
             routeLine: null
@@ -126,7 +178,6 @@
 
         function registerVote(cityName) {
             voteState.currentVote = cityName;
-
             const userId = window.telegramUserId || "unknown";
 
             fetch('/api/vote', {
@@ -182,12 +233,3 @@
     </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
