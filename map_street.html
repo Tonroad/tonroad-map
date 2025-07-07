@@ -117,7 +117,14 @@
         this.votes[dir]++;
         this.updateDisplay();
         try {
-          await fetch(`/api/votes/${this.city}/${this.mode}?direction=${dir}`, { method: 'POST' });
+          await fetch('https://alluring-vision.up.railway.app/api/Votes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: window.telegramUserId || 'unknown',
+              direction: dir
+            })
+          });
         } catch (e) {
           console.error('Ошибка отправки голоса', e);
         }
