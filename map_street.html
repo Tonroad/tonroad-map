@@ -16,12 +16,7 @@
     .mode-label, #citySelect, #voteResults, #driveButton, #backButton {
       position:absolute; z-index:1002;
     }
-    .mode-label {
-      top:10px; left:10px;
-      background:red; color:#fff;
-      padding:5px 10px; border-radius:4px;
-      cursor:pointer;
-    }
+    .mode-label { top:10px; left:10px; background:red; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; }
     #citySelect { top:10px; right:10px; padding:5px; }
     #voteResults { top:50px; left:10px; background:rgba(0,0,0,0.7); padding:5px 10px; border-radius:4px; }
     #driveButton { bottom:100px; right:10px; background:green; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
@@ -53,6 +48,8 @@
     <button data-dir="right">→ Вправо</button>
   </div>
   <script>
+    const apiBase = "https://alluring-vision.up.railway.app/api/Votes";
+
     class MapManager {
       constructor(mapEl, streetEl, cities) {
         this.cities = cities;
@@ -104,7 +101,7 @@
       }
       async load() {
         try {
-          const res = await fetch(`/api/votes/${this.city}/${this.mode}`);
+          const res = await fetch(`${apiBase}/${this.city}/${this.mode}`);
           const data = await res.json();
           this.votes = { left: 0, straight: 0, right: 0 };
           data.forEach(v => this.votes[v.direction] = v.count);
@@ -117,14 +114,7 @@
         this.votes[dir]++;
         this.updateDisplay();
         try {
-          await fetch('https://alluring-vision.up.railway.app/api/Votes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: window.telegramUserId || 'unknown',
-              direction: dir
-            })
-          });
+          await fetch(`${apiBase}/${this.city}/${this.mode}?direction=${dir}`, { method: 'POST' });
         } catch (e) {
           console.error('Ошибка отправки голоса', e);
         }
