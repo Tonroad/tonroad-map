@@ -2,27 +2,45 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
-  <title>TonRoad Street View</title>
+  <title>TonRoad Street</title>
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <style>
-    html, body { margin:0; padding:0; height:100%; font-family:Arial,sans-serif; background:#2c3e50; color:#ecf0f1; }
-    #map { height:30vh; width:100%; }
-    #street-view { height:70vh; width:100%; position:relative; }
-    .street-overlay {
-      position:absolute; top:0; left:0;
-      width:100%; height:100%; z-index:1001;
-      background:rgba(255,255,255,0); display:none;
+    html, body {
+      margin: 0; padding: 0;
+      height: 100%;
+      font-family: Arial, sans-serif;
+      background: #2c3e50;
+      color: #ecf0f1;
     }
-    .mode-label, #citySelect, #voteResults, #driveButton, #backButton {
-      position:absolute; z-index:1002;
+    #map { height: 30vh; width: 100%; }
+    #street-view { height: 70vh; width: 100%; position: relative; }
+    .overlay, .mode-label, #voteResults, #citySelect, #driveButton, #backButton, .vote-buttons {
+      position: absolute;
+      z-index: 1001;
     }
-    .mode-label { top:10px; left:10px; background:red; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; }
-    #citySelect { top:10px; right:10px; padding:5px; }
-    #voteResults { top:50px; left:10px; background:rgba(0,0,0,0.7); padding:5px 10px; border-radius:4px; }
-    #driveButton { bottom:100px; right:10px; background:green; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
-    #backButton { bottom:20px; right:10px; background:orange; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
-    .vote-buttons { position:absolute; bottom:20px; left:10px; z-index:1002; }
-    .vote-buttons button { margin-right:5px; padding:8px 12px; }
+    .mode-label {
+      top: 10px; left: 10px;
+      background: red; padding: 5px 10px;
+      border-radius: 5px; cursor: pointer;
+    }
+    #voteResults {
+      top: 50px; left: 10px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 5px 10px; border-radius: 5px;
+    }
+    #citySelect { top: 10px; right: 10px; }
+    #driveButton, #backButton {
+      bottom: 20px; padding: 10px 15px;
+      border-radius: 4px; cursor: pointer;
+    }
+    #driveButton { right: 10px; background: green; color: white; }
+    #backButton { right: 140px; background: orange; color: white; }
+    .vote-buttons {
+      bottom: 80px; left: 10px;
+    }
+    .vote-buttons button {
+      margin-right: 5px; padding: 8px 12px;
+    }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initApp" async defer></script>
@@ -36,192 +54,135 @@
     <option value="Novorossiysk">Новороссийск</option>
   </select>
   <div id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</div>
-  <button id="driveButton">ЕХАТЬ</button>
-  <button id="backButton">← Вернуться на карту</button>
   <div id="map"></div>
-  <div id="street-view">
-    <div id="streetOverlay" class="street-overlay"></div>
-  </div>
+  <div id="street-view"></div>
   <div class="vote-buttons">
     <button data-dir="left">← Влево</button>
     <button data-dir="straight">↑ Прямо</button>
     <button data-dir="right">→ Вправо</button>
-    <button id="testVoteButton" style="background:blue; color:white;">Test Vote (Left)</button>
   </div>
+  <button id="driveButton">ЕХАТЬ</button>
+  <button id="backButton">← Вернуться</button>
+
   <script>
     const apiBase = "https://c119a7ee-1920-4b1d-892f-a72ed2bcd086--00-3vv2w0fvor7to.kirk.replit.dev/api/Votes";
 
-    class MapManager {
-      constructor(mapEl, streetEl, cities) {
-        this.cities = cities;
-        this.panorama = new google.maps.StreetViewPanorama(streetEl, {
-          position: cities.Berlin,
-          pov: { heading: 0, pitch: 0 },
-          visible: true
+    const cities = {
+      Berlin: { lat: 52.52, lng: 13.405 },
+      Leipzig: { lat: 51.3397, lng: 12.3731 },
+      Dresden: { lat: 51.0504, lng: 13.7373 },
+      Novorossiysk: { lat: 44.7236, lng: 37.7689 }
+    };
+
+    let currentCity = "Berlin";
+    let currentMode = "voting";
+    let panorama, voteCounts = { left: 0, straight: 0, right: 0 };
+
+    function updateVoteDisplay() {
+      document.getElementById("voteResults").textContent =
+        `Влево: ${voteCounts.left} | Прямо: ${voteCounts.straight} | Вправо: ${voteCounts.right}`;
+    }
+
+    async function sendVote(direction) {
+      try {
+        await fetch(`${apiBase}/${currentCity}/${currentMode}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ direction })
         });
-        this.map = new google.maps.Map(mapEl, { center: cities.Berlin, zoom: 14 });
-        this.map.setStreetView(this.panorama);
-      }
-      setCity(cityKey) {
-        const pos = this.cities[cityKey];
-        this.map.setCenter(pos);
-        this.panorama.setPosition(pos);
-      }
-      setInteraction(enabled) {
-        this.panorama.setOptions({ clickToGo: enabled, linksControl: enabled });
-      }
-      findBestLink(dir) {
-        const pov = this.panorama.getPov().heading;
-        const links = this.panorama.getLinks() || [];
-        if (!links.length) throw new Error('Нет связей для движения');
-        const wantAngles = { straight: 0, left: 270, right: 90 };
-        const want = wantAngles[dir];
-        let best = { diff: Infinity, link: null };
-        links.forEach(link => {
-          let rel = (link.heading - pov + 360) % 360;
-          let diff = Math.abs(rel - want);
-          diff = Math.min(diff, 360 - diff);
-          if (diff < best.diff) best = { diff, link };
-        });
-        if (!best.link) throw new Error('Нет подходящего поворота');
-        return best.link;
-      }
-      rotateAndMove(dir) {
-        const link = this.findBestLink(dir);
-        this.panorama.setPov({ heading: link.heading, pitch: 0 });
-        setTimeout(() => this.panorama.setPano(link.pano), 500);
+        voteCounts[direction]++;
+        updateVoteDisplay();
+      } catch (e) {
+        alert("Ошибка отправки: " + e);
       }
     }
 
-    class VoteManager {
-      constructor(city, mode, displayEl) {
-        this.city = city;
-        this.mode = mode;
-        this.displayEl = displayEl;
-        this.votes = { left: 0, straight: 0, right: 0 };
-      }
-      async load() {
-        try {
-          const res = await fetch(`${apiBase}/${this.city}/${this.mode}`);
-          const data = await res.json();
-          this.votes = { left: 0, straight: 0, right: 0 };
-          data.forEach(v => this.votes[v.direction] = v.count);
-          this.updateDisplay();
-        } catch (e) {
-          console.error('Ошибка загрузки голосов', e);
-        }
-      }
-      async vote(dir) {
-        this.votes[dir]++;
-        this.updateDisplay();
-        try {
-          await fetch(`${apiBase}/${this.city}/${this.mode}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ direction: dir })
-          });
-        } catch (e) {
-          console.error('Ошибка отправки голоса', e);
-        }
-      }
-      updateDisplay() {
-        this.displayEl.textContent = `Влево: ${this.votes.left} | Прямо: ${this.votes.straight} | Вправо: ${this.votes.right}`;
-      }
-      reset() {
-        this.votes = { left: 0, straight: 0, right: 0 };
-        this.updateDisplay();
+    async function loadVotes() {
+      try {
+        const res = await fetch(`${apiBase}/${currentCity}/${currentMode}`);
+        const data = await res.json();
+        voteCounts = { left: 0, straight: 0, right: 0 };
+        data.forEach(item => voteCounts[item.direction] = item.count);
+        updateVoteDisplay();
+      } catch (e) {
+        console.error("Ошибка загрузки голосов", e);
       }
     }
 
-    class AppController {
-      constructor() {
-        this.cities = {
-          Berlin: { lat: 52.52, lng: 13.405 },
-          Leipzig: { lat: 51.3397, lng: 12.3731 },
-          Dresden: { lat: 51.0504, lng: 13.7373 },
-          Novorossiysk: { lat: 44.7236, lng: 37.7689 }
-        };
-        this.mode = 'voting';
-        this.mapMgr = new MapManager(
-          document.getElementById('map'),
-          document.getElementById('street-view'),
-          this.cities
-        );
-        const savedCity = localStorage.getItem("selectedCity") || "Berlin";
-        this.voteMgr = new VoteManager(savedCity, 'voting', document.getElementById('voteResults'));
-        this.mapMgr.setCity(savedCity);
-        this.overlay = document.getElementById('streetOverlay');
-        this.setupUI();
-        this.voteMgr.load();
-        this.updateOverlay();
-      }
-      setupUI() {
-        document.getElementById('modeLabel').addEventListener('click', () => this.toggleMode());
-        document.getElementById('citySelect').addEventListener('change', async e => {
-          this.mapMgr.setCity(e.target.value);
-          this.voteMgr.city = e.target.value;
-          localStorage.setItem("selectedCity", e.target.value);
-          await this.voteMgr.load();
-        });
-        document.querySelectorAll('.vote-buttons button').forEach(btn =>
-          btn.dataset.dir && btn.addEventListener('click', () => this.voteMgr.vote(btn.dataset.dir))
-        );
-        document.getElementById('driveButton').addEventListener('click', () => this.drive());
-        document.getElementById('backButton').addEventListener('click', () => {
-          window.location.href = 'map.html';
-        });
+    function moveInDirection(direction) {
+      const links = panorama.getLinks();
+      const currentHeading = panorama.getPov().heading;
+      const angles = { straight: 0, left: 270, right: 90 };
+      const desired = angles[direction];
+      let best = null, minDiff = Infinity;
 
-        // 👇 Test Vote (Left) кнопка
-        document.getElementById('testVoteButton').addEventListener('click', async () => {
-          try {
-            await fetch(`${apiBase}/Berlin/main`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ direction: 'left' })
-            });
-            alert("✔ Голос отправлен (left)");
-          } catch (err) {
-            alert("❌ Ошибка отправки: " + err);
-          }
-        });
-      }
-      toggleMode() {
-        this.mode = this.mode === 'voting' ? 'free' : 'voting';
-        document.getElementById('modeLabel').textContent = `Режим: ${this.mode === 'voting' ? 'Голосование' : 'Свободная езда'}`;
-        document.getElementById('modeLabel').style.background = this.mode === 'voting' ? 'red' : 'green';
-        this.voteMgr.mode = this.mode;
-        this.voteMgr.reset();
-        this.updateOverlay();
-      }
-      updateOverlay() {
-        const enabled = this.mode !== 'voting';
-        this.overlay.style.display = enabled ? 'none' : 'block';
-        this.mapMgr.setInteraction(enabled);
-      }
-      drive() {
-        if (this.mode !== 'voting') return;
-        const total = Object.values(this.voteMgr.votes).reduce((a, b) => a + b, 0);
-        if (total === 0) {
-          this.voteMgr.displayEl.textContent = 'Нет голосов для движения';
-          return;
+      for (const link of links) {
+        const rel = (link.heading - currentHeading + 360) % 360;
+        let diff = Math.abs(rel - desired);
+        diff = Math.min(diff, 360 - diff);
+        if (diff < minDiff) {
+          minDiff = diff;
+          best = link;
         }
-        const maxDir = Object.keys(this.voteMgr.votes).reduce((a, b) =>
-          this.voteMgr.votes[a] > this.voteMgr.votes[b] ? a : b
-        );
-        try {
-          this.mapMgr.rotateAndMove(maxDir);
-          this.voteMgr.displayEl.textContent = `Вы поехали как большинство (${maxDir})`;
-        } catch (e) {
-          console.warn(e);
-          this.voteMgr.displayEl.textContent = 'Нет подходящего поворота';
-        }
-        this.voteMgr.reset();
+      }
+
+      if (best) {
+        panorama.setPov({ heading: best.heading, pitch: 0 });
+        setTimeout(() => panorama.setPano(best.pano), 500);
+      } else {
+        alert("Нет подходящего поворота");
       }
     }
 
     function initApp() {
       Telegram.WebApp.ready();
-      new AppController();
+
+      const map = new google.maps.Map(document.getElementById("map"), {
+        center: cities[currentCity],
+        zoom: 14
+      });
+
+      panorama = new google.maps.StreetViewPanorama(document.getElementById("street-view"), {
+        position: cities[currentCity],
+        pov: { heading: 0, pitch: 0 },
+        visible: true
+      });
+
+      map.setStreetView(panorama);
+
+      document.querySelectorAll('.vote-buttons button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const dir = btn.dataset.dir;
+          sendVote(dir);
+        });
+      });
+
+      document.getElementById("citySelect").addEventListener("change", async e => {
+        currentCity = e.target.value;
+        panorama.setPosition(cities[currentCity]);
+        map.setCenter(cities[currentCity]);
+        await loadVotes();
+      });
+
+      document.getElementById("modeLabel").addEventListener("click", () => {
+        currentMode = currentMode === "voting" ? "free" : "voting";
+        document.getElementById("modeLabel").textContent = `Режим: ${currentMode === "voting" ? "Голосование" : "Свободная езда"}`;
+        document.getElementById("modeLabel").style.background = currentMode === "voting" ? "red" : "green";
+        loadVotes();
+      });
+
+      document.getElementById("driveButton").addEventListener("click", () => {
+        const maxDir = Object.keys(voteCounts).reduce((a, b) => voteCounts[a] > voteCounts[b] ? a : b);
+        moveInDirection(maxDir);
+        voteCounts = { left: 0, straight: 0, right: 0 };
+        updateVoteDisplay();
+      });
+
+      document.getElementById("backButton").addEventListener("click", () => {
+        window.location.href = "map.html";
+      });
+
+      loadVotes();
     }
   </script>
 </body>
