@@ -48,9 +48,7 @@
     <button data-dir="right">→ Вправо</button>
   </div>
   <script>
-   const apiBase = "https://tonroadvoteapi.replit.app/api/Votes";
-
-
+    const apiBase = "https://tonroadvoteapi.replit.app/api/Votes";
 
     class MapManager {
       constructor(mapEl, streetEl, cities) {
@@ -116,7 +114,15 @@
         this.votes[dir]++;
         this.updateDisplay();
         try {
-          await fetch(`${apiBase}/${this.city}/${this.mode}?direction=${dir}`, { method: 'POST' });
+          await fetch(`${apiBase}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              city: this.city,
+              mode: this.mode,
+              direction: dir
+            })
+          });
         } catch (e) {
           console.error('Ошибка отправки голоса', e);
         }
