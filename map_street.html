@@ -96,7 +96,8 @@
           this.votes[dir]++;
           this.updateDisplay();
           try {
-            const response = await fetch("https://qsdaooxywznloogyheyu.functions.supabase.co/cast_vote", {
+          const response = await fetch("https://qsdaooxywznloogyheyu.supabase.co/functions/v1/cast_vote-ts", {
+
               method: "POST",
               headers: {
                 "Content-Type": "application/json"
