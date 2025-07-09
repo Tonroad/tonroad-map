@@ -20,16 +20,10 @@
   </style>
 
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8" async defer></script>
 
   <script>
-    let supabase;
-
     window.onload = () => {
-      const supabaseUrl = "https://qsdaooxywznloogyehyu.supabase.co";
-      const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
-      supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
       Telegram.WebApp.ready();
       initApp();
     };
@@ -83,12 +77,13 @@
 
         async load() {
           try {
-            const { data, error } = await supabase
-              .from('votes_summary')
-              .select('direction, count')
-              .eq('city', this.city)
-              .eq('mode', this.mode);
-            if (error) throw error;
+            const url = `https://qsdaooxywznloogyehyu.supabase.co/rest/v1/votes_summary?select=direction,count&city=eq.${this.city}&mode=eq.${this.mode}`;
+            const response = await fetch(url, {
+              headers: {
+                apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do"
+              }
+            });
+            const data = await response.json();
             this.votes = { left: 0, straight: 0, right: 0 };
             data.forEach(v => this.votes[v.direction] = v.count);
             this.updateDisplay();
@@ -101,12 +96,18 @@
           this.votes[dir]++;
           this.updateDisplay();
           try {
-            const { error } = await supabase.rpc('increment_vote_count', {
-              city_input: this.city,
-              mode_input: this.mode,
-              direction_input: dir
+            const response = await fetch("https://qsdaooxywznloogyehyu.supabase.co/functions/v1/cast_vote", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                city: this.city,
+                mode: this.mode,
+                direction: dir
+              })
             });
-            if (error) throw error;
+            if (!response.ok) throw new Error("Ошибка ответа Supabase");
           } catch (e) {
             console.error('Ошибка отправки голоса', e);
           }
@@ -222,3 +223,4 @@
   </div>
 </body>
 </html>
+
