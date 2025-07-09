@@ -46,10 +46,10 @@
     <button data-dir="left">← Влево</button>
     <button data-dir="straight">↑ Прямо</button>
     <button data-dir="right">→ Вправо</button>
-    <button id="testVoteButton" style="background:blue; color:white;">Test Vote (Left)</button>
   </div>
   <script>
-    const apiBase = "https://c119a7ee-1920-4b1d-892f-a72ed2bcd086--00-3vv2w0fvor7to.kirk.replit.dev/api/Votes";
+   const apiBase = "https://c119a7ee-1920-4b1d-892f-a72ed2bcd086--00-3vv2w0fvor7to.kirk.replit.dev/api/Votes";
+
 
     class MapManager {
       constructor(mapEl, streetEl, cities) {
@@ -115,10 +115,14 @@
         this.votes[dir]++;
         this.updateDisplay();
         try {
-          await fetch(`${apiBase}/${this.city}/${this.mode}`, {
+          await fetch(`${apiBase}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ direction: dir })
+            body: JSON.stringify({
+              city: this.city,
+              mode: this.mode,
+              direction: dir
+            })
           });
         } catch (e) {
           console.error('Ошибка отправки голоса', e);
@@ -164,25 +168,11 @@
           await this.voteMgr.load();
         });
         document.querySelectorAll('.vote-buttons button').forEach(btn =>
-          btn.dataset.dir && btn.addEventListener('click', () => this.voteMgr.vote(btn.dataset.dir))
+          btn.addEventListener('click', () => this.voteMgr.vote(btn.dataset.dir))
         );
         document.getElementById('driveButton').addEventListener('click', () => this.drive());
         document.getElementById('backButton').addEventListener('click', () => {
           window.location.href = 'map.html';
-        });
-
-        // 👇 Test Vote (Left) кнопка
-        document.getElementById('testVoteButton').addEventListener('click', async () => {
-          try {
-            await fetch(`${apiBase}/Berlin/main`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ direction: 'left' })
-            });
-            alert("✔ Голос отправлен (left)");
-          } catch (err) {
-            alert("❌ Ошибка отправки: " + err);
-          }
         });
       }
       toggleMode() {
@@ -225,4 +215,4 @@
     }
   </script>
 </body>
-</html> proverjaj
+</html>
