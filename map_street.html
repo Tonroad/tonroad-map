@@ -170,6 +170,8 @@
         document.getElementById('backButton').addEventListener('click', () => {
           window.location.href = 'map.html';
         });
+
+        // 👇 Test Vote (Left) кнопка
         document.getElementById('testVoteButton').addEventListener('click', async () => {
           try {
             await fetch(`${apiBase}/Berlin/main`, {
@@ -223,4 +225,4 @@
     }
   </script>
 </body>
-</html>
+</html> proverjaj
