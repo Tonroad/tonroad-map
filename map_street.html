@@ -1,176 +1,157 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>TonRoad Street View</title>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-      html, body, #street-view { height: 100%; margin: 0; padding: 0; }
-      #controls {
-        position: absolute;
-        top: 10px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 9999;
-        background: rgba(255, 255, 255, 0.9);
-        padding: 10px;
-        border-radius: 8px;
-      }
-      button {
-        margin: 2px;
-        padding: 5px 10px;
-        font-size: 16px;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="controls">
-      <button onclick="vote('left')">⬅️</button>
-      <button onclick="vote('straight')">⬆️</button>
-      <button onclick="vote('right')">➡️</button>
-      <button onclick="drive()">ЕХАТЬ</button>
-    </div>
-    <div id="street-view"></div>
+<head>
+  <meta charset="utf-8" />
+  <title>TonRoad Street View</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8"></script>
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: white;
+      padding: 10px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      z-index: 999;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="controls">
+    <button onclick="vote('left')">←</button>
+    <button onclick="vote('straight')">↑</button>
+    <button onclick="vote('right')">→</button>
+    <button onclick="drive()">ЕХАТЬ</button>
+  </div>
 
-    <script>
-      const SUPABASE_URL = "https://qsdaooxywznloogyheyu.supabase.co";
-      const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
-      const CITY = "Novorossiysk";
-      const MODE = "street";
+  <script>
+    const SUPABASE_URL = "https://qsdaooxwzinologyheyv.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
+    const CITY = "Novorossiysk";
+    const MODE = "default";
+    let map, panorama, currentPosition = null;
 
-      let currentPosition = null;
-      let panorama;
-
-      async function loadCurrentPosition() {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/current_position?city=eq.${CITY}&order=updated_at.desc&limit=1`, {
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-        });
-        const data = await res.json();
-        if (data.length > 0) {
-          currentPosition = data[0];
-        } else {
-          currentPosition = {
-            lat: 44.723,
-            lng: 37.768,
-            heading: 0,
-          };
+    async function loadCurrentPosition() {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/current_position?city=eq.${CITY}&select=lat,lng,heading&order=updated_at.desc&limit=1`, {
+        headers: {
+          apiKey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`
         }
-      }
-
-      async function vote(direction) {
-        await fetch(`${SUPABASE_URL}/rest/v1/votes_summary`, {
-          method: "POST",
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            city: CITY,
-            mode: MODE,
-            direction: direction,
-            count: 1,
-          }),
-        });
-      }
-
-      async function getTopDirection() {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/votes_summary?city=eq.${CITY}&mode=eq.${MODE}`, {
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-        });
-        const data = await res.json();
-        let top = data.reduce((max, curr) => (curr.count > max.count ? curr : max), data[0]);
-        return top?.direction || "straight";
-      }
-
-      async function updateCurrentPosition(newPos) {
-        await fetch(`${SUPABASE_URL}/rest/v1/current_position`, {
-          method: "POST",
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            city: CITY,
-            lat: newPos.lat,
-            lng: newPos.lng,
-            heading: newPos.heading,
-          }),
-        });
-      }
-
-      async function resetVotes() {
-        await fetch(`${SUPABASE_URL}/functions/v1/bright-endpoint`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ city: CITY, mode: MODE }),
-        });
-      }
-
-      async function drive() {
-        const direction = await getTopDirection();
-        const headingDelta = direction === "left" ? -90 : direction === "right" ? 90 : 0;
-        const newHeading = (currentPosition.heading + headingDelta + 360) % 360;
-
-        const move = computeOffset(currentPosition.lat, currentPosition.lng, 10, newHeading);
-        currentPosition = {
-          lat: move.lat,
-          lng: move.lng,
-          heading: newHeading,
-        };
-
-        panorama.setPosition({ lat: currentPosition.lat, lng: currentPosition.lng });
-        panorama.setPov({ heading: currentPosition.heading, pitch: 0 });
-
-        await updateCurrentPosition(currentPosition);
-        await resetVotes();
-      }
-
-      function computeOffset(lat, lng, distanceMeters, headingDegrees) {
-        const R = 6378137;
-        const d = distanceMeters;
-        const h = headingDegrees * Math.PI / 180;
-        const lat1 = lat * Math.PI / 180;
-        const lng1 = lng * Math.PI / 180;
-
-        const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d / R) +
-          Math.cos(lat1) * Math.sin(d / R) * Math.cos(h));
-        const lng2 = lng1 + Math.atan2(
-          Math.sin(h) * Math.sin(d / R) * Math.cos(lat1),
-          Math.cos(d / R) - Math.sin(lat1) * Math.sin(lat2)
-        );
-
+      });
+      const data = await res.json();
+      if (data.length > 0) {
         return {
-          lat: lat2 * 180 / Math.PI,
-          lng: lng2 * 180 / Math.PI,
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lng),
+          heading: parseFloat(data[0].heading)
         };
+      } else {
+        return { lat: 44.72395, lng: 37.67878, heading: 0 };
       }
+    }
 
-      async function init() {
-        await loadCurrentPosition();
+    async function initMap() {
+      currentPosition = await loadCurrentPosition();
+      const sv = new google.maps.StreetViewService();
+      panorama = new google.maps.StreetViewPanorama(document.getElementById("map"), {
+        position: currentPosition,
+        pov: { heading: currentPosition.heading, pitch: 0 },
+        visible: true
+      });
+      map = new google.maps.Map(document.createElement("div")); // нужен объект карты для геокодера
+    }
 
-        const sv = new google.maps.StreetViewService();
-        panorama = new google.maps.StreetViewPanorama(document.getElementById("street-view"), {
-          position: { lat: currentPosition.lat, lng: currentPosition.lng },
-          pov: { heading: currentPosition.heading, pitch: 0 },
-          zoom: 1,
-        });
-      }
+    async function vote(direction) {
+      await fetch(`${SUPABASE_URL}/rest/v1/votes_summary`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apiKey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`
+        },
+        body: JSON.stringify({
+          city: CITY,
+          mode: MODE,
+          direction: direction,
+          count: 1
+        })
+      });
+    }
 
-      window.initMap = init;
-    </script>
-    <script async defer
-      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8&callback=initMap">
-    </script>
-  </body>
+    async function drive() {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/votes_summary?city=eq.${CITY}&mode=eq.${MODE}`, {
+        headers: {
+          apiKey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`
+        }
+      });
+      const votes = await response.json();
+      let max = 0, selected = "straight";
+      votes.forEach(v => {
+        if (v.count > max) {
+          max = v.count;
+          selected = v.direction;
+        }
+      });
+
+      const currentLoc = panorama.getLocation();
+      const next = getNextPosition(currentLoc.latLng, panorama.getPov().heading, selected);
+      if (!next) return alert("Место недоступно.");
+
+      panorama.setPosition(next);
+      panorama.setPov({ heading: next.heading, pitch: 0 });
+
+      // Сохраняем новую позицию
+      await fetch(`${SUPABASE_URL}/rest/v1/current_position`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apiKey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`
+        },
+        body: JSON.stringify({
+          city: CITY,
+          lat: next.lat,
+          lng: next.lng,
+          heading: next.heading
+        })
+      });
+
+      // Обнуляем голоса
+      await fetch(`${SUPABASE_URL}/functions/v1/bright-endpoint`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          city: CITY,
+          mode: MODE
+        })
+      });
+    }
+
+    function getNextPosition(latlng, heading, direction) {
+      let angle = heading;
+      if (direction === "left") angle -= 90;
+      if (direction === "right") angle += 90;
+
+      const distance = 0.0003; // прибл. 30м
+      const rad = angle * Math.PI / 180;
+      const dx = distance * Math.cos(rad);
+      const dy = distance * Math.sin(rad);
+
+      return {
+        lat: latlng.lat() + dy,
+        lng: latlng.lng() + dx,
+        heading: angle % 360
+      };
+    }
+
+    window.onload = initMap;
+  </script>
+</body>
 </html>
