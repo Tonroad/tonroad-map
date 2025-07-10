@@ -22,6 +22,32 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8" async defer></script>
 
+  <!-- Добавленные переменные Supabase -->
+  <script>
+    const SUPABASE_API = "https://qsdaooxywznloogyheyu.supabase.co/rest/v1";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
+
+    async function fetchSharedPosition() {
+      const res = await fetch(`${SUPABASE_API}/current_position?select=lat,lng&city=eq.Novorossiysk&mode=eq.voting`, {
+        headers: { apikey: SUPABASE_KEY }
+      });
+      const data = await res.json();
+      return data[0] || { lat: 44.7236, lng: 37.7689 };
+    }
+
+    async function saveSharedPosition(lat, lng) {
+      await fetch(`${SUPABASE_API}/current_position?city=eq.Novorossiysk&mode=eq.voting`, {
+        method: "PATCH",
+        headers: {
+          apikey: SUPABASE_KEY,
+          "Content-Type": "application/json",
+          Prefer: "resolution=merge-duplicates"
+        },
+        body: JSON.stringify({ lat, lng })
+      });
+    }
+  </script>
+
   <script>
     window.onload = () => {
       Telegram.WebApp.ready();
@@ -80,7 +106,7 @@
             const url = `https://qsdaooxywznloogyheyu.supabase.co/rest/v1/votes_summary?select=direction,count&city=eq.${this.city}&mode=eq.${this.mode}`;
             const response = await fetch(url, {
               headers: {
-                apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do"
+                apikey: SUPABASE_KEY
               }
             });
             const data = await response.json();
@@ -100,8 +126,8 @@
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do",
-                "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do"
+                "apikey": SUPABASE_KEY,
+                "Authorization": "Bearer " + SUPABASE_KEY
               },
               body: JSON.stringify({
                 city: this.city,
@@ -141,7 +167,13 @@
           );
           const savedCity = localStorage.getItem("selectedCity") || "Berlin";
           this.voteMgr = new VoteManager(savedCity, 'voting', document.getElementById('voteResults'));
-          this.mapMgr.setCity(savedCity);
+
+          // ➕ Загрузка общих координат
+          fetchSharedPosition().then(pos => {
+            this.mapMgr.map.setCenter(pos);
+            this.mapMgr.panorama.setPosition(pos);
+          });
+
           this.overlay = document.getElementById('streetOverlay');
           this.setupUI();
           this.voteMgr.load();
@@ -193,6 +225,11 @@
           try {
             this.mapMgr.rotateAndMove(maxDir);
             this.voteMgr.displayEl.textContent = `Вы поехали как большинство (${maxDir})`;
+
+            // ➕ Сохраняем координаты после движения
+            const position = this.mapMgr.panorama.getPosition();
+            saveSharedPosition(position.lat(), position.lng());
+
           } catch (e) {
             console.warn(e);
             this.voteMgr.displayEl.textContent = 'Нет подходящего поворота';
@@ -203,9 +240,13 @@
 
       const app = new AppController();
 
-      // 🔁 Автообновление голосов каждые 5 секунд
+      // 🔁 Обновление голосов и координат каждые 5 секунд
       setInterval(() => {
         app.voteMgr.load();
+        fetchSharedPosition().then(pos => {
+          app.mapMgr.map.setCenter(pos);
+          app.mapMgr.panorama.setPosition(pos);
+        });
       }, 5000);
     }
   </script>
