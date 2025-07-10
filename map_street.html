@@ -9,10 +9,11 @@
     #map { height:30vh; width:100%; }
     #street-view { height:70vh; width:100%; position:relative; }
     .street-overlay { position:absolute; top:0; left:0; width:100%; height:100%; z-index:1001; background:rgba(255,255,255,0); display:none; }
-    .mode-label, #citySelect, #voteResults, #driveButton, #backButton { position:absolute; z-index:1002; }
+    .mode-label, #citySelect, #voteResults, #coordsDisplay, #driveButton, #backButton { position:absolute; z-index:1002; }
     .mode-label { top:10px; left:10px; background:red; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; }
     #citySelect { top:10px; right:10px; padding:5px; }
     #voteResults { top:50px; left:10px; background:rgba(0,0,0,0.7); padding:5px 10px; border-radius:4px; }
+    #coordsDisplay { top:80px; left:10px; background:#34495e; padding:5px 10px; border-radius:4px; font-size:14px; }
     #driveButton { bottom:100px; right:10px; background:green; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
     #backButton { bottom:20px; right:10px; background:orange; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
     .vote-buttons { position:absolute; bottom:20px; left:10px; z-index:1002; }
@@ -20,32 +21,97 @@
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8" async defer></script>
+</head>
+<body>
+  <div id="modeLabel" class="mode-label">Режим: Голосование</div>
+  <select id="citySelect">
+    <option value="Berlin">Берлин</option>
+    <option value="Leipzig">Лейпциг</option>
+    <option value="Dresden">Дрезден</option>
+    <option value="Novorossiysk">Новороссийск</option>
+  </select>
+  <div id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</div>
+  <div id="coordsDisplay">Координаты: —</div>
+  <button id="driveButton">ЕХАТЬ</button>
+  <button id="backButton">← Вернуться на карту</button>
+  <div id="map"></div>
+  <div id="street-view"><div id="streetOverlay" class="street-overlay"></div></div>
+  <div class="vote-buttons">
+    <button data-dir="left">← Влево</button>
+    <button data-dir="straight">↑ Прямо</button>
+    <button data-dir="right">→ Вправо</button>
+  </div>
+
   <script>
+    const API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
+    const BASE_URL = "https://qsdaooxywznloogyheyu.supabase.co";
+
     window.onload = () => {
       Telegram.WebApp.ready();
       initApp();
     };
 
     function initApp() {
-      const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
-
       class MapManager {
         constructor(mapEl, streetEl, cities) {
           this.cities = cities;
           this.panorama = new google.maps.StreetViewPanorama(streetEl, {
-            position: cities.Berlin, pov: { heading: 0, pitch: 0 }, visible: true
+            position: cities.Berlin,
+            pov: { heading: 0, pitch: 0 },
+            visible: true
           });
-          this.map = new google.maps.Map(mapEl, { center: cities.Berlin, zoom: 14 });
+          this.map = new google.maps.Map(mapEl, {
+            center: cities.Berlin,
+            zoom: 14
+          });
           this.map.setStreetView(this.panorama);
         }
+
         setCity(cityKey) {
           const pos = this.cities[cityKey];
           this.map.setCenter(pos);
           this.panorama.setPosition(pos);
         }
+
         setInteraction(enabled) {
-          this.panorama.setOptions({ clickToGo: enabled, linksControl: enabled });
+          this.panorama.setOptions({
+            clickToGo: enabled,
+            linksControl: enabled
+          });
         }
+
+        getPosition() {
+          const pos = this.panorama.getPosition();
+          const heading = this.panorama.getPov().heading;
+          return { lat: pos.lat(), lng: pos.lng(), heading };
+        }
+
+        async loadPositionFromServer(city) {
+          const url = `${BASE_URL}/rest/v1/current_position?city=eq.${city}&select=lat,lng,heading&limit=1`;
+          const response = await fetch(url, { headers: { apikey: API_KEY } });
+          const data = await response.json();
+          if (data.length) {
+            const { lat, lng, heading } = data[0];
+            this.panorama.setPosition({ lat, lng });
+            this.panorama.setPov({ heading, pitch: 0 });
+            updateCoordsDisplay(lat, lng, heading);
+          }
+        }
+
+        async savePositionToServer(city) {
+          const pos = this.getPosition();
+          updateCoordsDisplay(pos.lat, pos.lng, pos.heading);
+          await fetch(`${BASE_URL}/rest/v1/current_position`, {
+            method: "POST",
+            headers: {
+              apikey: API_KEY,
+              "Content-Type": "application/json",
+              Prefer: "resolution=merge-duplicates"
+            },
+            body: JSON.stringify({ city, ...pos })
+          });
+        }
+
         findBestLink(dir) {
           const pov = this.panorama.getPov().heading;
           const links = this.panorama.getLinks() || [];
@@ -60,6 +126,7 @@
           if (!best.link) throw new Error('Нет подходящего поворота');
           return best.link;
         }
+
         rotateAndMove(dir) {
           const link = this.findBestLink(dir);
           this.panorama.setPov({ heading: link.heading, pitch: 0 });
@@ -74,45 +141,46 @@
           this.displayEl = displayEl;
           this.votes = { left: 0, straight: 0, right: 0 };
         }
+
         async load() {
-          try {
-            const url = `https://qsdaooxywznloogyheyu.supabase.co/rest/v1/votes_summary?select=direction,count&city=eq.${this.city}&mode=eq.${this.mode}`;
-            const response = await fetch(url, {
-              headers: { apikey: supabaseKey }
-            });
-            const data = await response.json();
-            this.votes = { left: 0, straight: 0, right: 0 };
-            data.forEach(v => this.votes[v.direction] = v.count);
-            this.updateDisplay();
-          } catch (e) {
-            console.error('Ошибка загрузки голосов', e);
-          }
+          const url = `${BASE_URL}/rest/v1/votes_summary?select=direction,count&city=eq.${this.city}&mode=eq.${this.mode}`;
+          const res = await fetch(url, { headers: { apikey: API_KEY } });
+          const data = await res.json();
+          this.votes = { left: 0, straight: 0, right: 0 };
+          data.forEach(v => this.votes[v.direction] = v.count);
+          this.updateDisplay();
         }
+
         async vote(dir) {
           this.votes[dir]++;
           this.updateDisplay();
-          try {
-            await fetch("https://qsdaooxywznloogyheyu.supabase.co/functions/v1/cast_vote-ts", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "apikey": supabaseKey,
-                "Authorization": `Bearer ${supabaseKey}`
-              },
-              body: JSON.stringify({
-                city: this.city,
-                mode: this.mode,
-                direction: dir
-              })
-            });
-          } catch (e) {
-            console.error('Ошибка отправки голоса', e);
-          }
+          await fetch(`${BASE_URL}/functions/v1/cast_vote-ts`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: API_KEY,
+              Authorization: `Bearer ${API_KEY}`
+            },
+            body: JSON.stringify({ city: this.city, mode: this.mode, direction: dir })
+          });
         }
+
+        async resetOnServer() {
+          await fetch(`${BASE_URL}/rest/v1/votes_summary?city=eq.${this.city}&mode=eq.${this.mode}`, {
+            method: "PATCH",
+            headers: {
+              apikey: API_KEY,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ count: 0 })
+          });
+        }
+
         updateDisplay() {
           this.displayEl.textContent = `Влево: ${this.votes.left} | Прямо: ${this.votes.straight} | Вправо: ${this.votes.right}`;
         }
-        reset() {
+
+        resetLocal() {
           this.votes = { left: 0, straight: 0, right: 0 };
           this.updateDisplay();
         }
@@ -126,165 +194,56 @@
             Dresden: { lat: 51.0504, lng: 13.7373 },
             Novorossiysk: { lat: 44.7236, lng: 37.7689 }
           };
-          this.mode = 'voting';
-          this.mapMgr = new MapManager(
-            document.getElementById('map'),
-            document.getElementById('street-view'),
-            this.cities
-          );
-          const savedCity = localStorage.getItem("selectedCity") || "Berlin";
-          this.voteMgr = new VoteManager(savedCity, 'voting', document.getElementById('voteResults'));
-          this.mapMgr.setCity(savedCity);
-          this.overlay = document.getElementById('streetOverlay');
-          this.setupUI();
+          this.mode = "voting";
+          this.mapMgr = new MapManager(document.getElementById('map'), document.getElementById('street-view'), this.cities);
+          const city = localStorage.getItem("selectedCity") || "Berlin";
+          this.voteMgr = new VoteManager(city, this.mode, document.getElementById('voteResults'));
+          this.mapMgr.loadPositionFromServer(city);
           this.voteMgr.load();
-          this.updateOverlay();
-          this.loadSavedPosition();
+          this.setupUI();
         }
 
         setupUI() {
-          document.getElementById('modeLabel').addEventListener('click', () => this.toggleMode());
+          document.getElementById('citySelect').value = this.voteMgr.city;
           document.getElementById('citySelect').addEventListener('change', async e => {
-            this.mapMgr.setCity(e.target.value);
             this.voteMgr.city = e.target.value;
             localStorage.setItem("selectedCity", e.target.value);
+            await this.mapMgr.loadPositionFromServer(e.target.value);
             await this.voteMgr.load();
-            this.loadSavedPosition();
           });
           document.querySelectorAll('.vote-buttons button').forEach(btn =>
             btn.addEventListener('click', () => this.voteMgr.vote(btn.dataset.dir))
           );
           document.getElementById('driveButton').addEventListener('click', () => this.drive());
-          document.getElementById('backButton').addEventListener('click', () => {
-            window.location.href = 'map.html';
-          });
-        }
-
-        toggleMode() {
-          this.mode = this.mode === 'voting' ? 'free' : 'voting';
-          document.getElementById('modeLabel').textContent = `Режим: ${this.mode === 'voting' ? 'Голосование' : 'Свободная езда'}`;
-          document.getElementById('modeLabel').style.background = this.mode === 'voting' ? 'red' : 'green';
-          this.voteMgr.mode = this.mode;
-          this.voteMgr.reset();
-          this.updateOverlay();
-          this.loadSavedPosition();
-        }
-
-        updateOverlay() {
-          const enabled = this.mode !== 'voting';
-          this.overlay.style.display = enabled ? 'none' : 'block';
-          this.mapMgr.setInteraction(enabled);
         }
 
         async drive() {
-          if (this.mode !== 'voting') return;
           const total = Object.values(this.voteMgr.votes).reduce((a, b) => a + b, 0);
           if (total === 0) {
             this.voteMgr.displayEl.textContent = 'Нет голосов для движения';
             return;
           }
-          const maxDir = Object.keys(this.voteMgr.votes).reduce((a, b) =>
-            this.voteMgr.votes[a] > this.voteMgr.votes[b] ? a : b
-          );
+          const maxDir = Object.keys(this.voteMgr.votes).reduce((a, b) => this.voteMgr.votes[a] > this.voteMgr.votes[b] ? a : b);
           try {
             this.mapMgr.rotateAndMove(maxDir);
             this.voteMgr.displayEl.textContent = `Вы поехали как большинство (${maxDir})`;
-            setTimeout(() => {
-              this.saveCurrentPosition();
-              this.resetVotes();
-            }, 1000);
+            await this.mapMgr.savePositionToServer(this.voteMgr.city);
+            await this.voteMgr.resetOnServer();
+            this.voteMgr.resetLocal();
           } catch (e) {
-            console.warn(e);
-            this.voteMgr.displayEl.textContent = 'Нет подходящего поворота';
+            this.voteMgr.displayEl.textContent = 'Нет поворота';
           }
-          this.voteMgr.reset();
         }
+      }
 
-        async saveCurrentPosition() {
-          const pos = this.mapMgr.panorama.getPosition();
-          const heading = this.mapMgr.panorama.getPov().heading;
-          const payload = {
-            city: this.voteMgr.city,
-            mode: this.mode,
-            lat: pos.lat(),
-            lng: pos.lng(),
-            heading: heading
-          };
-          try {
-            await fetch("https://qsdaooxywznloogyheyu.supabase.co/rest/v1/current_position", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "apikey": supabaseKey,
-                "Authorization": `Bearer ${supabaseKey}`,
-                "Prefer": "resolution=merge-duplicates"
-              },
-              body: JSON.stringify(payload)
-            });
-          } catch (e) {
-            console.error("Ошибка при сохранении позиции", e);
-          }
-        }
-
-        async loadSavedPosition() {
-          try {
-            const url = `https://qsdaooxywznloogyheyu.supabase.co/rest/v1/current_position?city=eq.${this.voteMgr.city}&mode=eq.${this.mode}&select=lat,lng,heading&order=updated_at.desc&limit=1`;
-            const res = await fetch(url, { headers: { apikey: supabaseKey } });
-            const data = await res.json();
-            if (data.length > 0) {
-              const pos = { lat: data[0].lat, lng: data[0].lng };
-              const heading = data[0].heading;
-              this.mapMgr.map.setCenter(pos);
-              this.mapMgr.panorama.setPosition(pos);
-              this.mapMgr.panorama.setPov({ heading: heading, pitch: 0 });
-            }
-          } catch (e) {
-            console.warn("Ошибка загрузки координат", e);
-          }
-        }
-
-        async resetVotes() {
-          try {
-            await fetch("https://qsdaooxywznloogyheyu.supabase.co/functions/v1/reset_votes", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "apikey": supabaseKey,
-                "Authorization": `Bearer ${supabaseKey}`
-              },
-              body: JSON.stringify({
-                city: this.voteMgr.city,
-                mode: this.mode
-              })
-            });
-          } catch (e) {
-            console.error("Ошибка сброса голосов", e);
-          }
-        }
+      function updateCoordsDisplay(lat, lng, heading) {
+        document.getElementById('coordsDisplay').textContent =
+          `Координаты: ${lat.toFixed(5)}, ${lng.toFixed(5)}, heading: ${heading.toFixed(1)}`;
       }
 
       const app = new AppController();
       setInterval(() => app.voteMgr.load(), 5000);
     }
   </script>
-</head>
-<body>
-  <div id="modeLabel" class="mode-label">Режим: Голосование</div>
-  <select id="citySelect">
-    <option value="Berlin">Берлин</option>
-    <option value="Leipzig">Лейпциг</option>
-    <option value="Dresden">Дрезден</option>
-    <option value="Novorossiysk">Новороссийск</option>
-  </select>
-  <div id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</div>
-  <button id="driveButton">ЕХАТЬ</button>
-  <button id="backButton">← Вернуться на карту</button>
-  <div id="map"></div>
-  <div id="street-view"><div id="streetOverlay" class="street-overlay"></div></div>
-  <div class="vote-buttons">
-    <button data-dir="left">← Влево</button>
-    <button data-dir="straight">↑ Прямо</button>
-    <button data-dir="right">→ Вправо</button>
-  </div>
 </body>
 </html>
