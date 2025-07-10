@@ -1,130 +1,182 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TonRoad Street View</title>
+  <title>TonRoad Map Voting</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="initial-scale=1.0">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.5/dist/umd/supabase.min.js"></script>
-  <style>
-    body { margin: 0; font-family: sans-serif; background: #f5f5f5; }
-    #map, #pano { width: 100%; height: 300px; }
-    #controls { display: flex; justify-content: center; gap: 10px; margin: 10px; flex-wrap: wrap; }
-    #status, #votes, #coords { text-align: center; margin-top: 5px; font-weight: bold; }
-    .btn { padding: 10px 15px; font-size: 16px; }
-    .red { background-color: red; color: white; }
-    .green { background-color: green; color: white; }
-  </style>
 </head>
 <body>
-  <div id="status" class="red">Режим: Голосование</div>
-  <div style="text-align:center">
-    <span id="votes">Влево: 0 | Прямо: 0 | Вправо: 0</span><br>
-    <span id="coords">Координаты: -</span>
-  </div>
-  <div id="map"></div>
-  <div id="pano"></div>
-  <div id="controls">
-    <button class="btn" onclick="castVote('left')">← Влево</button>
-    <button class="btn" onclick="castVote('straight')">↑ Прямо</button>
-    <button class="btn" onclick="castVote('right')">→ Вправо</button>
-    <button class="btn green" onclick="moveCar()">ЕХАТЬ</button>
-  </div>
-  <script>
-    const supabase = window.supabase.createClient(
-      'https://qsdaooxywnzloogyheyu.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do'
-    );
+  <h2>TonRoad Map Voting</h2>
 
-    let currentLat = 44.7239;
-    let currentLng = 37.76795;
-    let currentHeading = 46.8;
-    let hasVoted = false;
-    const city = 'Novorossiysk';
-    const mode = 'voting';
+  <div id="map" style="height: 400px;"></div>
+  <div id="pano" style="height: 300px;"></div>
+
+  <div>
+    <button onclick="castVote('left')">⬅️ Влево</button>
+    <button onclick="castVote('straight')">⬆️ Прямо</button>
+    <button onclick="castVote('right')">➡️ Вправо</button>
+    <button onclick="drive()">🚗 ЕХАТЬ</button>
+  </div>
+
+  <h3>Голоса</h3>
+  <ul id="votes"></ul>
+
+  <h3>Текущие координаты машины:</h3>
+  <div id="current-coordinates">Загрузка...</div>
+
+  <script>
+    const supabaseUrl = 'https://qsdaooxywznloogyehyu.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do';
+    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
+    let map, panorama, marker;
+    let currentCity = 'Novorossiysk';
+    let userVoted = false;
 
     async function loadPosition() {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('current_position')
         .select('*')
-        .eq('city', city)
-        .order('updated_at', { ascending: false })
-        .limit(1)
+        .eq('city', currentCity)
         .single();
-      if (data) {
-        currentLat = data.lat;
-        currentLng = data.lng;
-        currentHeading = data.heading;
+
+      if (error || !data) {
+        console.error('Ошибка загрузки позиции:', error);
+        return;
       }
-      document.getElementById('coords').textContent = `Координаты: ${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}, heading: ${currentHeading.toFixed(1)}`;
-      initMap();
+
+      const { lat, lng, heading } = data;
+      document.getElementById("current-coordinates").innerText = `Lat: ${lat}, Lng: ${lng}, Heading: ${heading}`;
+      initMap(lat, lng, heading);
     }
 
-    async function castVote(direction) {
-      if (hasVoted) return alert('Вы уже проголосовали.');
-      await supabase.rpc('cast_vote_ts', { cityname: city, modemode: mode, directionname: direction });
-      hasVoted = true;
-      updateVotes();
-    }
-
-    async function updateVotes() {
-      const { data } = await supabase
-        .from('votes_summary')
-        .select('*')
-        .eq('city', city)
-        .eq('mode', mode);
-      const counts = { left: 0, straight: 0, right: 0 };
-      data.forEach(row => { counts[row.direction] = row.count });
-      document.getElementById('votes').textContent = `Влево: ${counts.left} | Прямо: ${counts.straight} | Вправо: ${counts.right}`;
-    }
-
-    async function moveCar() {
-      const { data } = await supabase
-        .from('votes_summary')
-        .select('*')
-        .eq('city', city)
-        .eq('mode', mode);
-
-      let maxVotes = -1;
-      let direction = 'straight';
-      data.forEach(row => {
-        if (row.count > maxVotes) {
-          maxVotes = row.count;
-          direction = row.direction;
-        }
-      });
-
-      if (direction === 'left') currentHeading -= 90;
-      else if (direction === 'right') currentHeading += 90;
-      if (currentHeading < 0) currentHeading += 360;
-      if (currentHeading >= 360) currentHeading -= 360;
-
-      await supabase.from('current_position').upsert({ city, lat: currentLat, lng: currentLng, heading: currentHeading });
-      await supabase.rpc('reset_votes', { cityname: city, modemode: mode });
-
-      hasVoted = false;
-      loadPosition();
-    }
-
-    function initMap() {
-      const map = new google.maps.Map(document.getElementById("map"), {
-        center: { lat: currentLat, lng: currentLng },
+    function initMap(lat, lng, heading) {
+      const position = { lat: parseFloat(lat), lng: parseFloat(lng) };
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: position,
         zoom: 16
       });
-      const panorama = new google.maps.StreetViewPanorama(
-        document.getElementById("pano"), {
-          position: { lat: currentLat, lng: currentLng },
-          pov: { heading: currentHeading, pitch: 0 },
-          addressControl: false,
-          fullscreenControl: false,
-        });
+
+      marker = new google.maps.Marker({
+        position,
+        map,
+        title: "TonRoad Car"
+      });
+
+      panorama = new google.maps.StreetViewPanorama(
+        document.getElementById("pano"),
+        {
+          position,
+          pov: { heading: parseFloat(heading), pitch: 0 },
+          zoom: 1
+        }
+      );
       map.setStreetView(panorama);
     }
 
-    Telegram.WebApp.ready();
+    async function castVote(direction) {
+      if (userVoted) {
+        alert("Вы уже проголосовали. Подождите следующего хода.");
+        return;
+      }
+
+      const { data, error } = await supabase.rpc('cast_vote_ts', {
+        city_name: currentCity,
+        vote_direction: direction
+      });
+
+      if (error) {
+        console.error('Ошибка голосования:', error);
+        return;
+      }
+
+      userVoted = true;
+      loadVotes();
+    }
+
+    async function loadVotes() {
+      const { data, error } = await supabase
+        .from('votes_summary')
+        .select('*')
+        .eq('city', currentCity)
+        .eq('mode', 'voting');
+
+      if (error) {
+        console.error('Ошибка загрузки голосов:', error);
+        return;
+      }
+
+      const voteList = document.getElementById("votes");
+      voteList.innerHTML = '';
+      data.forEach(v => {
+        const li = document.createElement("li");
+        li.textContent = `${v.direction}: ${v.count}`;
+        voteList.appendChild(li);
+      });
+    }
+
+    async function drive() {
+      const { data: votes, error } = await supabase
+        .from('votes_summary')
+        .select('*')
+        .eq('city', currentCity)
+        .eq('mode', 'voting');
+
+      if (error || votes.length === 0) {
+        alert('Нет голосов для движения.');
+        return;
+      }
+
+      let max = -1;
+      let chosen = 'straight';
+      votes.forEach(v => {
+        if (v.count > max) {
+          max = v.count;
+          chosen = v.direction;
+        }
+      });
+
+      const { lat, lng, heading } = panorama.getLocation().latLng;
+      const newHeading = chosen === 'left' ? heading - 90 :
+                         chosen === 'right' ? heading + 90 : heading;
+
+      panorama.setPov({ heading: newHeading, pitch: 0 });
+      panorama.setVisible(true);
+
+      // Сохраняем новое положение
+      const loc = panorama.getLocation();
+      if (!loc || !loc.latLng) return;
+
+      const newLat = loc.latLng.lat();
+      const newLng = loc.latLng.lng();
+
+      await supabase
+        .from('current_position')
+        .upsert({
+          city: currentCity,
+          lat: newLat,
+          lng: newLng,
+          heading: newHeading
+        });
+
+      document.getElementById("current-coordinates").innerText =
+        `Lat: ${newLat}, Lng: ${newLng}, Heading: ${newHeading}`;
+
+      userVoted = false;
+
+      await supabase.rpc('reset_votes', {
+        city_name: currentCity
+      });
+
+      loadVotes();
+    }
+
     loadPosition();
-    updateVotes();
+    setInterval(loadVotes, 5000);
   </script>
 </body>
 </html>
+
