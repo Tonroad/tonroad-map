@@ -9,11 +9,10 @@
     #map { height:30vh; width:100%; }
     #street-view { height:70vh; width:100%; position:relative; }
     .street-overlay { position:absolute; top:0; left:0; width:100%; height:100%; z-index:1001; background:rgba(255,255,255,0); display:none; }
-    .mode-label, #citySelect, #voteResults, #positionDisplay, #driveButton, #backButton { position:absolute; z-index:1002; }
+    .mode-label, #citySelect, #voteResults, #driveButton, #backButton { position:absolute; z-index:1002; }
     .mode-label { top:10px; left:10px; background:red; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; }
     #citySelect { top:10px; right:10px; padding:5px; }
     #voteResults { top:50px; left:10px; background:rgba(0,0,0,0.7); padding:5px 10px; border-radius:4px; }
-    #positionDisplay { top:90px; left:10px; background:rgba(0,0,0,0.7); padding:5px 10px; border-radius:4px; }
     #driveButton { bottom:100px; right:10px; background:green; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
     #backButton { bottom:20px; right:10px; background:orange; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
     .vote-buttons { position:absolute; bottom:20px; left:10px; z-index:1002; }
@@ -30,6 +29,8 @@
     };
 
     function initApp() {
+      const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
+
       class MapManager {
         constructor(mapEl, streetEl, cities) {
           this.cities = cities;
@@ -80,9 +81,7 @@
           try {
             const url = `https://qsdaooxywznloogyheyu.supabase.co/rest/v1/votes_summary?select=direction,count&city=eq.${this.city}&mode=eq.${this.mode}`;
             const response = await fetch(url, {
-              headers: {
-                apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-              }
+              headers: { apikey: supabaseKey }
             });
             const data = await response.json();
             this.votes = { left: 0, straight: 0, right: 0 };
@@ -101,8 +100,8 @@
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                "apikey": supabaseKey,
+                "Authorization": `Bearer ${supabaseKey}`
               },
               body: JSON.stringify({
                 city: this.city,
@@ -110,7 +109,7 @@
                 direction: dir
               })
             });
-            if (!response.ok) throw new Error("Ошибка Supabase");
+            if (!response.ok) throw new Error("Ошибка ответа Supabase");
           } catch (e) {
             console.error('Ошибка отправки голоса', e);
           }
@@ -147,9 +146,7 @@
           this.setupUI();
           this.voteMgr.load();
           this.updateOverlay();
-          this.updatePositionDisplay();
-          setInterval(() => this.voteMgr.load(), 5000);
-          setInterval(() => this.updatePositionDisplay(), 2000);
+          this.loadSavedPosition();
         }
 
         setupUI() {
@@ -159,7 +156,7 @@
             this.voteMgr.city = e.target.value;
             localStorage.setItem("selectedCity", e.target.value);
             await this.voteMgr.load();
-            this.updatePositionDisplay();
+            this.loadSavedPosition();
           });
           document.querySelectorAll('.vote-buttons button').forEach(btn =>
             btn.addEventListener('click', () => this.voteMgr.vote(btn.dataset.dir))
@@ -177,6 +174,7 @@
           this.voteMgr.mode = this.mode;
           this.voteMgr.reset();
           this.updateOverlay();
+          this.loadSavedPosition();
         }
 
         updateOverlay() {
@@ -185,60 +183,48 @@
           this.mapMgr.setInteraction(enabled);
         }
 
-        async savePositionToSupabase() {
-          const position = this.mapMgr.panorama.getPosition();
+        async saveCurrentPosition() {
+          const pos = this.mapMgr.panorama.getPosition();
           const heading = this.mapMgr.panorama.getPov().heading;
+          const payload = {
+            city: this.voteMgr.city,
+            mode: this.mode,
+            lat: pos.lat(),
+            lng: pos.lng(),
+            heading: heading
+          };
           try {
             await fetch("https://qsdaooxywznloogyheyu.supabase.co/rest/v1/current_position", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                "apikey": supabaseKey,
+                "Authorization": `Bearer ${supabaseKey}`,
+                "Prefer": "resolution=merge-duplicates"
               },
-              body: JSON.stringify({
-                city: this.voteMgr.city,
-                lat: position.lat(),
-                lng: position.lng(),
-                heading: heading
-              })
+              body: JSON.stringify(payload)
             });
           } catch (e) {
-            console.error("Ошибка при отправке координат:", e);
+            console.error("Ошибка при сохранении позиции", e);
           }
         }
 
-        async updatePositionDisplay() {
+        async loadSavedPosition() {
           try {
-            const url = `https://qsdaooxywznloogyheyu.supabase.co/rest/v1/current_position?select=lat,lng,heading&city=eq.${this.voteMgr.city}&order=updated_at.desc&limit=1`;
+            const url = `https://qsdaooxywznloogyheyu.supabase.co/rest/v1/current_position?city=eq.${this.voteMgr.city}&mode=eq.${this.mode}&select=lat,lng,heading&limit=1`;
             const res = await fetch(url, {
-              headers: { apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+              headers: { apikey: supabaseKey }
             });
             const data = await res.json();
             if (data.length > 0) {
-              const pos = data[0];
-              document.getElementById('positionDisplay').textContent =
-                `Позиция: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)} (heading: ${Math.round(pos.heading)})`;
+              const pos = { lat: data[0].lat, lng: data[0].lng };
+              const heading = data[0].heading;
+              this.mapMgr.map.setCenter(pos);
+              this.mapMgr.panorama.setPosition(pos);
+              this.mapMgr.panorama.setPov({ heading: heading, pitch: 0 });
             }
           } catch (e) {
-            console.error('Ошибка получения координат:', e);
-          }
-        }
-
-        async resetVotes() {
-          try {
-            await fetch("https://qsdaooxywznloogyheyu.supabase.co/functions/v1/bright-endpoint", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({
-                city: this.voteMgr.city,
-                mode: this.mode
-              })
-            });
-          } catch (e) {
-            console.error("Ошибка при сбросе голосов:", e);
+            console.warn("Ошибка загрузки сохранённой позиции", e);
           }
         }
 
@@ -254,19 +240,20 @@
           );
           try {
             this.mapMgr.rotateAndMove(maxDir);
-            this.voteMgr.displayEl.textContent = `Поехали (${maxDir})`;
+            this.voteMgr.displayEl.textContent = `Вы поехали как большинство (${maxDir})`;
+            setTimeout(() => this.saveCurrentPosition(), 1000);
           } catch (e) {
             console.warn(e);
-            this.voteMgr.displayEl.textContent = 'Нет поворота';
+            this.voteMgr.displayEl.textContent = 'Нет подходящего поворота';
           }
           this.voteMgr.reset();
-          await this.savePositionToSupabase();
-          await this.resetVotes();
-          this.updatePositionDisplay();
         }
       }
 
       const app = new AppController();
+      setInterval(() => {
+        app.voteMgr.load();
+      }, 5000);
     }
   </script>
 </head>
@@ -279,7 +266,6 @@
     <option value="Novorossiysk">Новороссийск</option>
   </select>
   <div id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</div>
-  <div id="positionDisplay">Позиция: —</div>
   <button id="driveButton">ЕХАТЬ</button>
   <button id="backButton">← Вернуться на карту</button>
   <div id="map"></div>
