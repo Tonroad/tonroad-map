@@ -1,313 +1,200 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
   <title>TonRoad Street View</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    html, body { margin:0; padding:0; height:100%; font-family:Arial,sans-serif; background:#2c3e50; color:#ecf0f1; }
-    #map { height:30vh; width:100%; }
-    #street-view { height:70vh; width:100%; position:relative; }
-    .street-overlay { position:absolute; top:0; left:0; width:100%; height:100%; z-index:1001; background:rgba(255,255,255,0); display:none; }
-    .mode-label, #citySelect, #voteResults, #driveButton, #backButton { position:absolute; z-index:1002; }
-    .mode-label { top:10px; left:10px; background:red; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; }
-    #citySelect { top:10px; right:10px; padding:5px; }
-    #voteResults { top:50px; left:10px; background:rgba(0,0,0,0.7); padding:5px 10px; border-radius:4px; }
-    #driveButton { bottom:100px; right:10px; background:green; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
-    #backButton { bottom:20px; right:10px; background:orange; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
-    .vote-buttons { position:absolute; bottom:20px; left:10px; z-index:1002; }
-    .vote-buttons button { margin-right:5px; padding:8px 12px; }
-  </style>
-
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8" async defer></script>
-
-  <script>
-    window.onload = () => {
-      Telegram.WebApp.ready();
-      initApp();
-    };
-
-    function initApp() {
-      const SUPABASE_URL = "https://qsdaooxywznloogyheyu.supabase.co";
-      const API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
-
-      class MapManager {
-        constructor(mapEl, streetEl, cities) {
-          this.cities = cities;
-          this.position = { lat: 44.7236, lng: 37.7689 };
-          this.heading = 0;
-          this.panorama = new google.maps.StreetViewPanorama(streetEl, {
-            position: this.position,
-            pov: { heading: this.heading, pitch: 0 }, visible: true
-          });
-          this.map = new google.maps.Map(mapEl, { center: this.position, zoom: 14 });
-          this.map.setStreetView(this.panorama);
-
-          this.panorama.addListener('position_changed', () => {
-            const pos = this.panorama.getPosition();
-            const pov = this.panorama.getPov();
-            this.position = { lat: pos.lat(), lng: pos.lng() };
-            this.heading = pov.heading || 0;
-            document.getElementById('voteResults').innerText += `\nКоординаты: ${this.position.lat.toFixed(5)}, ${this.position.lng.toFixed(5)}, угол: ${this.heading.toFixed(1)}`;
-          });
-        }
-
-        setPosition(lat, lng, heading = 0) {
-          this.position = { lat, lng };
-          this.heading = heading;
-          this.map.setCenter(this.position);
-          this.panorama.setPosition(this.position);
-          this.panorama.setPov({ heading: this.heading, pitch: 0 });
-        }
-
-        getCurrentData() {
-          return { lat: this.position.lat, lng: this.position.lng, heading: this.heading };
-        }
-
-        setCity(cityKey) {
-          const pos = this.cities[cityKey];
-          this.setPosition(pos.lat, pos.lng, 0);
-        }
-
-        setInteraction(enabled) {
-          this.panorama.setOptions({ clickToGo: enabled, linksControl: enabled });
-        }
-
-        findBestLink(dir) {
-          const pov = this.panorama.getPov().heading;
-          const links = this.panorama.getLinks() || [];
-          const want = { straight: 0, left: 270, right: 90 }[dir];
-          let best = { diff: Infinity, link: null };
-          links.forEach(link => {
-            let rel = (link.heading - pov + 360) % 360;
-            let diff = Math.abs(rel - want);
-            diff = Math.min(diff, 360 - diff);
-            if (diff < best.diff) best = { diff, link };
-          });
-          if (!best.link) throw new Error('Нет подходящего поворота');
-          return best.link;
-        }
-
-        rotateAndMove(dir) {
-          const link = this.findBestLink(dir);
-          this.panorama.setPov({ heading: link.heading, pitch: 0 });
-          setTimeout(() => this.panorama.setPano(link.pano), 500);
-        }
-      }
-
-      class VoteManager {
-        constructor(city, mode, displayEl) {
-          this.city = city;
-          this.mode = mode;
-          this.displayEl = displayEl;
-          this.votes = { left: 0, straight: 0, right: 0 };
-        }
-
-        async load() {
-          try {
-            const url = `${SUPABASE_URL}/rest/v1/votes_summary?select=direction,count&city=eq.${this.city}&mode=eq.${this.mode}`;
-            const response = await fetch(url, {
-              headers: { apikey: API_KEY }
-            });
-            const data = await response.json();
-            this.votes = { left: 0, straight: 0, right: 0 };
-            data.forEach(v => this.votes[v.direction] = v.count);
-            this.updateDisplay();
-          } catch (e) {
-            console.error('Ошибка загрузки голосов', e);
-          }
-        }
-
-        async vote(dir) {
-          this.votes[dir]++;
-          this.updateDisplay();
-          try {
-            await fetch(`${SUPABASE_URL}/functions/v1/cast_vote-ts`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                apikey: API_KEY,
-                Authorization: `Bearer ${API_KEY}`
-              },
-              body: JSON.stringify({ city: this.city, mode: this.mode, direction: dir })
-            });
-          } catch (e) {
-            console.error('Ошибка голосования', e);
-          }
-        }
-
-        async resetVotes() {
-          try {
-            await fetch(`${SUPABASE_URL}/functions/v1/reset_votes`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                apikey: API_KEY,
-                Authorization: `Bearer ${API_KEY}`
-              },
-              body: JSON.stringify({ city: this.city, mode: this.mode })
-            });
-          } catch (e) {
-            console.error('Ошибка сброса голосов', e);
-          }
-        }
-
-        updateDisplay() {
-          this.displayEl.textContent = `Влево: ${this.votes.left} | Прямо: ${this.votes.straight} | Вправо: ${this.votes.right}`;
-        }
-
-        reset() {
-          this.votes = { left: 0, straight: 0, right: 0 };
-          this.updateDisplay();
-        }
-      }
-
-      class AppController {
-        constructor() {
-          this.cities = {
-            Berlin: { lat: 52.52, lng: 13.405 },
-            Leipzig: { lat: 51.3397, lng: 12.3731 },
-            Dresden: { lat: 51.0504, lng: 13.7373 },
-            Novorossiysk: { lat: 44.7236, lng: 37.7689 }
-          };
-          this.mode = 'voting';
-          this.city = localStorage.getItem("selectedCity") || "Novorossiysk";
-
-          this.mapMgr = new MapManager(
-            document.getElementById('map'),
-            document.getElementById('street-view'),
-            this.cities
-          );
-
-          this.voteMgr = new VoteManager(this.city, this.mode, document.getElementById('voteResults'));
-
-          this.init();
-        }
-
-        async init() {
-          await this.loadCurrentPosition();
-          this.setupUI();
-          this.voteMgr.load();
-          this.updateOverlay();
-          setInterval(() => this.voteMgr.load(), 5000);
-        }
-
-        async loadCurrentPosition() {
-          try {
-            const res = await fetch(`${SUPABASE_URL}/rest/v1/current_position?select=lat,lng,heading&city=eq.${this.city}&limit=1`, {
-              headers: { apikey: API_KEY }
-            });
-            const data = await res.json();
-            if (data.length > 0) {
-              const { lat, lng, heading } = data[0];
-              this.mapMgr.setPosition(lat, lng, heading);
-            } else {
-              this.mapMgr.setCity(this.city);
-            }
-          } catch (e) {
-            console.error("Ошибка получения текущей позиции", e);
-            this.mapMgr.setCity(this.city);
-          }
-        }
-
-        setupUI() {
-          document.getElementById('modeLabel').addEventListener('click', () => this.toggleMode());
-          document.getElementById('citySelect').addEventListener('change', async e => {
-            this.city = e.target.value;
-            localStorage.setItem("selectedCity", this.city);
-            this.voteMgr.city = this.city;
-            await this.loadCurrentPosition();
-            await this.voteMgr.load();
-          });
-
-          document.querySelectorAll('.vote-buttons button').forEach(btn =>
-            btn.addEventListener('click', () => this.voteMgr.vote(btn.dataset.dir))
-          );
-
-          document.getElementById('driveButton').addEventListener('click', () => this.drive());
-          document.getElementById('backButton').addEventListener('click', () => {
-            window.location.href = 'map.html';
-          });
-        }
-
-        toggleMode() {
-          this.mode = this.mode === 'voting' ? 'free' : 'voting';
-          document.getElementById('modeLabel').textContent = `Режим: ${this.mode === 'voting' ? 'Голосование' : 'Свободная езда'}`;
-          document.getElementById('modeLabel').style.background = this.mode === 'voting' ? 'red' : 'green';
-          this.voteMgr.mode = this.mode;
-          this.voteMgr.reset();
-          this.updateOverlay();
-        }
-
-        updateOverlay() {
-          const enabled = this.mode !== 'voting';
-          document.getElementById('streetOverlay').style.display = enabled ? 'none' : 'block';
-          this.mapMgr.setInteraction(enabled);
-        }
-
-        async drive() {
-          if (this.mode !== 'voting') return;
-
-          const total = Object.values(this.voteMgr.votes).reduce((a, b) => a + b, 0);
-          if (total === 0) {
-            this.voteMgr.displayEl.textContent = 'Нет голосов для движения';
-            return;
-          }
-
-          const maxDir = Object.keys(this.voteMgr.votes).reduce((a, b) =>
-            this.voteMgr.votes[a] > this.voteMgr.votes[b] ? a : b
-          );
-
-          try {
-            this.mapMgr.rotateAndMove(maxDir);
-            this.voteMgr.displayEl.textContent = `Вы поехали как большинство (${maxDir})`;
-
-            // Сохранить новые координаты
-            const { lat, lng, heading } = this.mapMgr.getCurrentData();
-            await fetch(`${SUPABASE_URL}/rest/v1/current_position`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                apikey: API_KEY,
-                Authorization: `Bearer ${API_KEY}`,
-                Prefer: "resolution=merge-duplicates"
-              },
-              body: JSON.stringify({ city: this.city, lat, lng, heading })
-            });
-
-            // Обнулить голоса
-            await this.voteMgr.resetVotes();
-          } catch (e) {
-            console.warn(e);
-            this.voteMgr.displayEl.textContent = 'Нет подходящего поворота';
-          }
-
-          this.voteMgr.reset();
-        }
-      }
-
-      new AppController();
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: Arial, sans-serif;
+      background: #2c3e50;
+      color: #ecf0f1;
     }
-  </script>
+    #map, #pano {
+      width: 100%;
+    }
+    #map {
+      height: 40%;
+    }
+    #pano {
+      height: 60%;
+    }
+    .controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 9999;
+    }
+    .controls button {
+      margin-right: 5px;
+    }
+    #modeLabel {
+      font-weight: bold;
+      margin-right: 10px;
+    }
+    #coordDisplay {
+      position: absolute;
+      top: 40px;
+      left: 10px;
+      z-index: 9999;
+      background: rgba(0,0,0,0.5);
+      padding: 5px 10px;
+      border-radius: 5px;
+    }
+  </style>
 </head>
 <body>
-  <div id="modeLabel" class="mode-label">Режим: Голосование</div>
-  <select id="citySelect">
-    <option value="Berlin">Берлин</option>
-    <option value="Leipzig">Лейпциг</option>
-    <option value="Dresden">Дрезден</option>
-    <option value="Novorossiysk" selected>Новороссийск</option>
-  </select>
-  <div id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</div>
-  <button id="driveButton">ЕХАТЬ</button>
-  <button id="backButton">← Вернуться на карту</button>
-  <div id="map"></div>
-  <div id="street-view"><div id="streetOverlay" class="street-overlay"></div></div>
-  <div class="vote-buttons">
-    <button data-dir="left">← Влево</button>
-    <button data-dir="straight">↑ Прямо</button>
-    <button data-dir="right">→ Вправо</button>
+  <div class="controls">
+    <span id="modeLabel">Режим:</span>
+    <select id="citySelect">
+      <option value="Novorossiysk">Новороссийск</option>
+    </select>
   </div>
+  <div id="coordDisplay">Координаты: —</div>
+  <div id="map"></div>
+  <div id="pano"></div>
+
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8"></script>
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+    const supabase = createClient(
+      'https://qsdaoovxwznloogyheyu.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do'
+    );
+
+    let map, panorama;
+    let currentLat = 44.7236, currentLng = 37.7685, currentHeading = 0;
+    let hasVoted = false;
+    let city = "Novorossiysk";
+
+    const coordDisplay = document.getElementById("coordDisplay");
+
+    document.getElementById("citySelect").addEventListener("change", async (e) => {
+      city = e.target.value;
+      await loadLastPosition();
+    });
+
+    async function loadLastPosition() {
+      const { data, error } = await supabase
+        .from('current_position')
+        .select('lat, lng, heading')
+        .eq('city', city)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (data) {
+        currentLat = data.lat;
+        currentLng = data.lng;
+        currentHeading = data.heading;
+        moveCamera();
+      }
+    }
+
+    function moveCamera() {
+      if (panorama) {
+        panorama.setPosition({ lat: currentLat, lng: currentLng });
+        panorama.setPov({ heading: currentHeading, pitch: 0 });
+        coordDisplay.innerText = `Координаты: ${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}, угол: ${currentHeading.toFixed(1)}`;
+      }
+    }
+
+    async function updatePosition(lat, lng, heading) {
+      await supabase.from("current_position").insert({
+        city: city,
+        lat: lat,
+        lng: lng,
+        heading: heading
+      });
+    }
+
+    async function resetVotes() {
+      await supabase
+        .from("votes_summary")
+        .update({ count: 0 })
+        .eq("city", city)
+        .eq("mode", "vote");
+    }
+
+    function vote(direction) {
+      if (hasVoted) return;
+      hasVoted = true;
+
+      supabase.rpc("vote_increment", {
+        input_city: city,
+        input_mode: "vote",
+        input_direction: direction
+      });
+    }
+
+    function calculateNextPosition(direction) {
+      const distance = 0.0002;
+      const angle = (direction === "left") ? currentHeading - 90 :
+                    (direction === "right") ? currentHeading + 90 : currentHeading;
+      const rad = angle * (Math.PI / 180);
+      const dx = Math.cos(rad) * distance;
+      const dy = Math.sin(rad) * distance;
+
+      currentLat += dy;
+      currentLng += dx;
+      currentHeading = angle % 360;
+    }
+
+    async function drive() {
+      const { data } = await supabase
+        .from("votes_summary")
+        .select("direction, count")
+        .eq("city", city)
+        .eq("mode", "vote");
+
+      let best = data.reduce((a, b) => a.count > b.count ? a : b);
+      calculateNextPosition(best.direction);
+
+      moveCamera();
+      await updatePosition(currentLat, currentLng, currentHeading);
+      await resetVotes();
+      hasVoted = false;
+    }
+
+    window.initMap = async function () {
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat: currentLat, lng: currentLng },
+        zoom: 16
+      });
+
+      panorama = new google.maps.StreetViewPanorama(
+        document.getElementById("pano"),
+        {
+          position: { lat: currentLat, lng: currentLng },
+          pov: { heading: currentHeading, pitch: 0 },
+          visible: true
+        }
+      );
+
+      map.setStreetView(panorama);
+
+      document.body.insertAdjacentHTML("beforeend", `
+        <div style="position: absolute; bottom: 10px; left: 10px; z-index: 9999;">
+          <button onclick="vote('left')">⬅ Влево</button>
+          <button onclick="vote('straight')">↑ Прямо</button>
+          <button onclick="vote('right')">➡ Вправо</button>
+        </div>
+        <button onclick="drive()" style="position: absolute; bottom: 10px; right: 10px; z-index: 9999; background: green; color: white;">ЕХАТЬ</button>
+      `);
+
+      await loadLastPosition();
+    };
+
+    window.vote = vote;
+    window.drive = drive;
+
+    window.onload = () => {
+      initMap();
+    };
+  </script>
 </body>
 </html>
