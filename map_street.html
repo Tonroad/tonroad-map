@@ -201,7 +201,12 @@
         }
       }
 
-      new AppController();
+      const app = new AppController();
+
+      // 🔁 Автообновление голосов каждые 5 секунд
+      setInterval(() => {
+        app.voteMgr.load();
+      }, 5000);
     }
   </script>
 </head>
@@ -225,5 +230,3 @@
   </div>
 </body>
 </html>
-
-
