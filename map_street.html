@@ -31,14 +31,12 @@
       const city = "Novorossiysk";
       const mode = "voting";
 
-      // Получаем текущие координаты и heading
       const current = await fetch("https://qsdaooxywznloogyheyu.supabase.co/rest/v1/current_position?city=eq." + city + "&select=lat,lng,heading", {
         headers: {
           apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do"
         }
       }).then(r => r.json()).then(r => r[0] || { lat: 44.7236, lng: 37.7689, heading: 0 });
 
-      // Инициализация Street View
       const panorama = new google.maps.StreetViewPanorama(document.getElementById("street-view"), {
         position: { lat: current.lat, lng: current.lng },
         pov: { heading: current.heading, pitch: 0 },
@@ -76,9 +74,19 @@
           headers: {
             "Content-Type": "application/json",
             apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do",
-            Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do"
+            Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
           },
           body: JSON.stringify({ city, mode, direction: dir })
+        });
+      }
+
+      async function resetVotes() {
+        await fetch("https://qsdaooxywznloogyheyu.supabase.co/functions/v1/bright-endpoint", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ city, mode })
         });
       }
 
@@ -121,11 +129,13 @@
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do",
-            Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do"
+            apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+            Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
           },
           body: JSON.stringify({ city, lat: pos.lat(), lng: pos.lng(), heading })
         });
+
+        await resetVotes(); // ✅ сбрасываем голоса
       }
 
       document.querySelectorAll(".vote-buttons button").forEach(btn => {
