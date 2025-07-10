@@ -1,159 +1,175 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Tonroad Street View</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8"></script>
-    <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        font-family: Arial, sans-serif;
-        background: #222;
-        color: #fff;
-      }
-      #map, #pano {
-        width: 100%;
-        height: 50%;
-      }
-      #info-box {
-        position: absolute;
-        top: 5px;
-        right: 5px;
-        background: rgba(0,0,0,0.7);
-        padding: 10px;
-        border-radius: 8px;
-        z-index: 9999;
-        font-size: 14px;
-      }
-      #controls {
-        position: absolute;
-        bottom: 10px;
-        left: 10px;
-        z-index: 9999;
-      }
-      #controls button {
-        margin-right: 5px;
-        padding: 6px 10px;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="map"></div>
-    <div id="pano"></div>
-    <div id="info-box">Координаты: <span id="coords">загрузка...</span></div>
-    <div id="controls">
-      <button onclick="move('left')">⬅️ Влево</button>
-      <button onclick="move('straight')">⬆️ Прямо</button>
-      <button onclick="move('right')">➡️ Вправо</button>
-      <button onclick="savePosition()">✅ ЕХАТЬ</button>
-    </div>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TonRoad Map</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8"></script>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #e2e2e2;
+    }
+    #map {
+      height: 40%;
+    }
+    #pano {
+      height: 60%;
+    }
+    #coords {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      background-color: white;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 14px;
+      z-index: 999;
+    }
+    #mode-label {
+      position: absolute;
+      top: 0;
+      left: 0;
+      background: red;
+      color: white;
+      padding: 5px 15px;
+      font-weight: bold;
+      z-index: 999;
+    }
+    .vote-buttons {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      z-index: 999;
+    }
+    .vote-buttons button {
+      margin: 0 5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="mode-label">Режим: Голосование</div>
+  <div id="coords">Координаты: ...</div>
+  <div id="map"></div>
+  <div id="pano"></div>
 
-    <script>
-      const supabaseUrl = "https://qsdaooxywzlooghveyu.supabase.co";
-      const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
+  <div class="vote-buttons">
+    <button onclick="castVote('left')">⬅️ Влево</button>
+    <button onclick="castVote('straight')">⬆️ Прямо</button>
+    <button onclick="castVote('right')">➡️ Вправо</button>
+    <button onclick="drive()">🚗 ЕХАТЬ</button>
+    <button onclick="location.reload()">🔄 — Вернуться на карту</button>
+  </div>
 
-      let map, pano;
-      let currentLat = 44.7236;
-      let currentLng = 37.7689;
-      let currentHeading = 0;
+  <script>
+    const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
+    const baseUrl = "https://qsdaooxywzloghveyuh.supabase.co/rest/v1";
+    const headers = {
+      "apikey": anonKey,
+      "Authorization": `Bearer ${anonKey}`,
+      "Content-Type": "application/json",
+      "Prefer": "return=minimal"
+    };
 
-      async function fetchPosition() {
-        const response = await fetch(`${supabaseUrl}/rest/v1/current_position?select=lat,lng,heading&city=eq.Novorossiysk&order=updated_at.desc&limit=1`, {
-          headers: {
-            apikey: supabaseKey,
-            Authorization: `Bearer ${supabaseKey}`
-          }
-        });
-        const data = await response.json();
-        if (data.length > 0) {
-          currentLat = data[0].lat;
-          currentLng = data[0].lng;
-          currentHeading = data[0].heading;
+    const city = "Novorossiysk";
+    const mode = "voting";
+
+    let map, panorama;
+    let currentPosition = { lat: 44.7236, lng: 37.7689 };
+    let heading = 0;
+
+    async function loadCurrentPosition() {
+      const res = await fetch(`${baseUrl}/current_position?city=eq.${city}&order=updated_at.desc&limit=1`, { headers });
+      const data = await res.json();
+      if (data.length > 0) {
+        currentPosition.lat = data[0].lat;
+        currentPosition.lng = data[0].lng;
+        heading = data[0].heading || 0;
+      }
+    }
+
+    async function saveCurrentPosition() {
+      await fetch(`${baseUrl}/current_position`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          city,
+          lat: currentPosition.lat,
+          lng: currentPosition.lng,
+          heading
+        })
+      });
+    }
+
+    function updateCoordinatesDisplay() {
+      const coordsEl = document.getElementById("coords");
+      coordsEl.textContent = `Координаты: ${currentPosition.lat.toFixed(5)}, ${currentPosition.lng.toFixed(5)}`;
+    }
+
+    function initMap() {
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: currentPosition,
+        zoom: 15
+      });
+
+      panorama = new google.maps.StreetViewPanorama(
+        document.getElementById("pano"),
+        {
+          position: currentPosition,
+          pov: { heading: heading, pitch: 0 },
+          visible: true
         }
-      }
+      );
 
-      async function updatePosition() {
-        await fetch(`${supabaseUrl}/rest/v1/current_position`, {
-          method: 'POST',
-          headers: {
-            apikey: supabaseKey,
-            Authorization: `Bearer ${supabaseKey}`,
-            'Content-Type': 'application/json',
-            Prefer: 'return=minimal'
-          },
-          body: JSON.stringify({
-            city: 'Novorossiysk',
-            lat: currentLat,
-            lng: currentLng,
-            heading: currentHeading
-          })
-        });
+      map.setStreetView(panorama);
 
-        // reset_votes
-        await fetch(`${supabaseUrl}/rest/v1/rpc/reset_votes`, {
-          method: 'POST',
-          headers: {
-            apikey: supabaseKey,
-            Authorization: `Bearer ${supabaseKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            city_name: "Novorossiysk",
-            mode_name: "voting"
-          })
-        });
-      }
+      panorama.addListener("position_changed", () => {
+        currentPosition = {
+          lat: panorama.getPosition().lat(),
+          lng: panorama.getPosition().lng()
+        };
+        updateCoordinatesDisplay();
+      });
 
-      function updateMapAndView() {
-        const position = { lat: currentLat, lng: currentLng };
-        map.setCenter(position);
-        pano.setPosition(position);
-        pano.setPov({ heading: currentHeading, pitch: 0 });
-        document.getElementById('coords').innerText = `lat: ${currentLat.toFixed(5)}, lng: ${currentLng.toFixed(5)}`;
-      }
+      panorama.addListener("pov_changed", () => {
+        heading = panorama.getPov().heading;
+      });
 
-      function move(direction) {
-        if (direction === 'left') currentHeading -= 45;
-        if (direction === 'right') currentHeading += 45;
-        if (direction === 'straight') {
-          const headingRad = currentHeading * (Math.PI / 180);
-          const distance = 0.0005;
-          currentLat += distance * Math.cos(headingRad);
-          currentLng += distance * Math.sin(headingRad);
-        }
-        updateMapAndView();
-      }
+      updateCoordinatesDisplay();
+    }
 
-      async function savePosition() {
-        await updatePosition();
-        alert("Позиция сохранена и голоса сброшены.");
-      }
+    function castVote(direction) {
+      fetch(`${baseUrl}/rpc/increment_vote`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          p_city: city,
+          p_direction: direction,
+          p_mode: mode
+        })
+      });
+    }
 
-      async function initMap() {
-        await fetchPosition();
+    async function drive() {
+      await saveCurrentPosition();
+      await fetch(`${baseUrl}/rpc/reset_votes`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          city_name: city,
+          mode_name: mode
+        })
+      });
+      alert("🚗 Машина поехала!");
+    }
 
-        const position = { lat: currentLat, lng: currentLng };
-        map = new google.maps.Map(document.getElementById("map"), {
-          center: position,
-          zoom: 16,
-          disableDefaultUI: true
-        });
-
-        pano = new google.maps.StreetViewPanorama(document.getElementById("pano"), {
-          position: position,
-          pov: { heading: currentHeading, pitch: 0 },
-          zoom: 1
-        });
-
-        map.setStreetView(pano);
-        updateMapAndView();
-      }
-
-      window.onload = initMap;
-    </script>
-  </body>
+    (async () => {
+      await loadCurrentPosition();
+      initMap();
+    })();
+  </script>
+</body>
 </html>
