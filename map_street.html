@@ -183,6 +183,30 @@
           this.mapMgr.setInteraction(enabled);
         }
 
+        async savePositionToSupabase() {
+          const position = this.mapMgr.panorama.getPosition();
+          const heading = this.mapMgr.panorama.getPov().heading;
+          try {
+            const response = await fetch("https://qsdaooxywznloogyheyu.supabase.co/rest/v1/current_position", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do",
+                "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do"
+              },
+              body: JSON.stringify({
+                city: this.voteMgr.city,
+                lat: position.lat(),
+                lng: position.lng(),
+                heading: heading
+              })
+            });
+            if (!response.ok) throw new Error("Ошибка сохранения позиции в Supabase");
+          } catch (e) {
+            console.error("Ошибка при отправке координат:", e);
+          }
+        }
+
         async updatePositionDisplay() {
           try {
             const url = `https://qsdaooxywznloogyheyu.supabase.co/rest/v1/current_position?select=lat,lng,heading&city=eq.${this.voteMgr.city}&order=updated_at.desc&limit=1`;
@@ -204,7 +228,7 @@
           }
         }
 
-        drive() {
+        async drive() {
           if (this.mode !== 'voting') return;
           const total = Object.values(this.voteMgr.votes).reduce((a, b) => a + b, 0);
           if (total === 0) {
@@ -222,6 +246,7 @@
             this.voteMgr.displayEl.textContent = 'Нет подходящего поворота';
           }
           this.voteMgr.reset();
+          await this.savePositionToSupabase();
           this.updatePositionDisplay();
         }
       }
