@@ -61,34 +61,6 @@
       box-shadow: 0 1px 8px rgba(0,0,0,.07) inset;
       z-index: 1;
     }
-    #street-view-blocker {
-      position: absolute;
-      left: 0; top: 0; right: 0; bottom: 0;
-      width: 100vw;
-      height: 100%;
-      z-index: 3;
-      background: transparent;
-      pointer-events: auto;
-      transition: opacity .18s;
-    }
-    #lockBtn {
-      position: absolute;
-      right: 15px;
-      top: 15px;
-      z-index: 10;
-      background: #3498db;
-      color: #fff;
-      border-radius: 50%;
-      width: 34px;
-      height: 34px;
-      border: none;
-      font-size: 18px;
-      box-shadow: 0 2px 8px rgba(0,0,0,.13);
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-      transition: background .18s;
-    }
-    #lockBtn:active { background: #217ab7;}
     #controls {
       width: 100vw;
       display: flex; flex-direction: column; gap: 6px; align-items: center;
@@ -184,8 +156,6 @@
     </div>
     <div id="main-content">
       <div id="street-view"></div>
-      <div id="street-view-blocker"></div>
-      <button id="lockBtn" title="Заблокировать/разблокировать панораму">🔒</button>
       <div id="controls">
         <div id="voteBtns">
           <button class="btn-vote left" data-dir="left">←</button>
@@ -229,37 +199,6 @@
         btn.style.opacity = disabled ? '0.55' : '1';
         btn.style.pointerEvents = disabled ? 'none' : 'auto';
       });
-    }
-
-    // --- Блокировка/разблокировка кликов и поворотов по панораме ---
-    let streetViewOrientationBlocked = true;
-
-    function setStreetViewBlocked(blocked) {
-      const blocker = document.getElementById('street-view-blocker');
-      if (blocked) {
-        blocker.style.display = '';
-        document.getElementById('lockBtn').textContent = '🔒';
-        setStreetViewOrientationBlocked(true);
-      } else {
-        blocker.style.display = 'none';
-        document.getElementById('lockBtn').textContent = '🔓';
-        setStreetViewOrientationBlocked(false);
-      }
-    }
-
-    function setStreetViewOrientationBlocked(blocked) {
-      streetViewOrientationBlocked = blocked;
-      if (blocked) {
-        window.addEventListener("deviceorientation", fixPanoramaHeading, true);
-      } else {
-        window.removeEventListener("deviceorientation", fixPanoramaHeading, true);
-      }
-    }
-
-    function fixPanoramaHeading(e) {
-      if (!panorama) return;
-      const pov = panorama.getPov();
-      panorama.setPov({ heading: pov.heading, pitch: pov.pitch });
     }
 
     window.onload = () => {
@@ -326,19 +265,11 @@
       updateVotes();
       drawRouteOnMap();
 
+      // Проверяем, не голосовал ли уже пользователь в этом городе
       if (localStorage.getItem("voted_" + selectedCity) === "1") {
         setVoteButtonsDisabled(true);
       } else {
         setVoteButtonsDisabled(false);
-      }
-
-      // По умолчанию панорама заблокирована!
-      setStreetViewBlocked(true);
-
-      // Логика кнопки "замок"
-      document.getElementById('lockBtn').onclick = function() {
-        const blocked = document.getElementById('street-view-blocker').style.display !== 'none';
-        setStreetViewBlocked(!blocked);
       }
     }
 
@@ -349,12 +280,12 @@
       mapRoutePath.setPath([CITIES[city]]);
       updateVotes();
       resetTimer();
+      // Тоже проверяем состояние голосования
       if (localStorage.getItem("voted_" + city) === "1") {
         setVoteButtonsDisabled(true);
       } else {
         setVoteButtonsDisabled(false);
       }
-      setStreetViewBlocked(true);
     }
 
     async function updateVotes() {
@@ -370,6 +301,7 @@
     }
 
     async function castVote(dir) {
+      // Блокируем повторное голосование
       if (localStorage.getItem("voted_" + selectedCity) === "1") return;
       await fetch(`${BASE_URL}/functions/v1/cast_vote-ts`, {
         method: "POST",
@@ -436,6 +368,7 @@
         },
         body: JSON.stringify({ count: 0 })
       });
+      // После движения — разблокируем кнопки голосования
       localStorage.removeItem("voted_" + selectedCity);
       setVoteButtonsDisabled(false);
       updateVotes();
@@ -469,6 +402,7 @@
         },
         body: JSON.stringify({ count: 0 })
       });
+      // После сброса — разблокируем кнопки голосования
       localStorage.removeItem("voted_" + city);
       setVoteButtonsDisabled(false);
       updateVotes();
