@@ -3,36 +3,116 @@
 <head>
   <meta charset="utf-8" />
   <title>TonRoad Street View</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
   <style>
-    html, body { margin:0; padding:0; height:100%; font-family:Arial,sans-serif; background:#263544; color:#fff; }
-    #headerBar { display:flex; align-items:center; gap:5px; padding:4px 4px 2px 4px; }
-    #cityLabel { font-size:13px; font-weight:bold; }
-    #citySelect { font-size:12px; padding:1px 4px; background:#26a96e; color:#fff; border:none; border-radius:6px; }
-    #voteResults { background:#222b38; color:#fff; padding:1px 5px; border-radius:8px; font-size:12px; font-weight:bold; margin-left:5px; }
-    #topPanel { display:flex; flex-direction:column; gap:5px; }
-    #mapPopup { position:fixed; top:0; left:0; width:100vw; height:32vh; background:#fff; z-index:2002; display:none; flex-direction:column; border-radius:0 0 20px 20px; box-shadow:0 8px 32px rgba(0,0,0,.33); }
-    #hideMapBtn { background:#19e074; color:#111; font-size:13px; font-weight:bold; padding:5px 0; border-radius:12px; border:none; margin:6px 10vw 0 10vw; cursor:pointer; }
-    #mapCanvas { width:100vw; height:14vh; border-radius:0 0 10px 10px; }
-    #street-view { width:100vw; height:28vh; }
-    #controls { width:100vw; display:flex; flex-direction:column; gap:3px; align-items:center; margin-top:2px; }
-    #voteBtns { display:flex; flex-direction:row; justify-content:center; gap:2vw; margin-bottom:0; width:100vw; }
-    .btn-vote { font-size:13px; font-weight:bold; border:none; border-radius:8px; padding:4px 4vw; margin:0; cursor:pointer; min-width:38px; min-height:24px; }
-    .btn-vote.left { background:#4d73e8; color:#fff; }
-    .btn-vote.straight { background:#2ecc71; color:#fff; }
-    .btn-vote.right { background:#ffc43c; color:#222; }
-    #mainBtns { display:flex; flex-direction:row; justify-content:center; gap:1vw; margin-bottom:0; width:100vw; }
-    .btn-main { font-size:12px; font-weight:bold; border:none; border-radius:7px; padding:3px 2vw; margin:0; cursor:pointer; min-width:34px; min-height:22px;}
-    .btn-main.start { background:#3498db; color:#fff; }
-    .btn-main.drive { background:#26a96e; color:#fff; }
-    .btn-main.back { background:#ff9100; color:#fff; }
-    .btn-main.radio { background:#4ecbfa; color:#111; display:flex; align-items:center; gap:4px; }
-    .btn-main.map { background:#3498db; color:#fff; }
-    #timerLabel { font-size:11px; background:#222b38; color:#19e074; border-radius:5px; padding:2px 7px; margin:2px 0 0 0; text-align:center; }
-    @media (max-width:600px) {
-      #voteBtns, #mainBtns { flex-wrap:nowrap; gap:1vw; }
-      .btn-vote, .btn-main { font-size:11px; padding:2px 1.7vw; min-width:28px; min-height:18px;}
-      #voteResults { font-size:10px; }
+    html, body {
+      margin: 0; padding: 0; height: 100%; width: 100vw;
+      font-family: Arial, sans-serif; background: #263544; color: #fff;
+      overflow-x: hidden;
+    }
+    body {
+      min-height: 100vh; width: 100vw; box-sizing: border-box;
+      display: flex; flex-direction: column;
+    }
+    #headerBar {
+      display: flex; align-items: center; gap: 5px;
+      padding: 10px 6vw 8px 6vw;
+      background: #212e3e; border-radius: 0 0 18px 18px; box-shadow: 0 3px 12px rgba(0,0,0,.16);
+      min-height: 44px;
+      font-size: 16px;
+    }
+    #cityLabel { font-size: 14px; font-weight: bold; }
+    #citySelect {
+      font-size: 15px; padding: 5px 18px; background: #26a96e; color: #fff; border: none;
+      border-radius: 7px; font-weight: bold; box-shadow: 0 2px 8px rgba(38,169,110,.15);
+      outline: none;
+    }
+    #voteResults {
+      background: #2b3548; color: #fff; padding: 3px 16px;
+      border-radius: 10px; font-size: 13px; font-weight: bold; margin-left: auto;
+      box-shadow: 0 2px 8px rgba(34,43,56,.10);
+    }
+    #topPanel { display: flex; flex-direction: column; gap: 5px; }
+    #timerLabel {
+      font-size: 14px; background: #1b242f; color: #19e074;
+      border-radius: 7px; padding: 6px 0; margin: 4px 8vw 0 8vw;
+      text-align: center; font-weight: bold;
+      box-shadow: 0 2px 8px rgba(34,43,56,.10);
+      letter-spacing: 1px;
+    }
+    #mapPopup {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 33vh; background: #fff;
+      z-index: 2002; display: none; flex-direction: column;
+      border-radius: 0 0 20px 20px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.18);
+      padding-bottom: 2vw;
+      animation: popupShow .35s;
+    }
+    @keyframes popupShow {
+      from { opacity: 0; transform: translateY(-30px);}
+      to   { opacity: 1; transform: translateY(0);}
+    }
+    #hideMapBtn {
+      background: #19e074; color: #111; font-size: 15px; font-weight: bold;
+      padding: 9px 0; border-radius: 14px; border: none; margin: 9px 12vw 0 12vw; cursor: pointer;
+      box-shadow: 0 2px 10px rgba(25,224,116,.12);
+      transition: background .2s;
+    }
+    #hideMapBtn:active { background: #16b96a; }
+    #mapCanvas {
+      width: 100vw; height: 16vh; border-radius: 0 0 14px 14px;
+      background: #e9f3ff;
+    }
+    #street-view {
+      width: 100vw; height: 32vh;
+      background: #263544; box-shadow: 0 2px 16px rgba(0,0,0,.07) inset;
+    }
+    #controls {
+      width: 100vw; flex: 1 1 0; display: flex; flex-direction: column; gap: 8px; align-items: center;
+      justify-content: flex-end; margin-top: 0;
+      padding-bottom: 16px;
+    }
+    #voteBtns {
+      display: flex; flex-direction: row; justify-content: center; gap: 5vw; width: 100vw; margin-bottom: 6px;
+    }
+    .btn-vote {
+      font-size: 24px; font-weight: bold; border: none; border-radius: 15px;
+      padding: 14px 6vw; margin: 0; cursor: pointer; min-width: 64px; min-height: 44px;
+      box-shadow: 0 2px 16px rgba(0,0,0,.08);
+      transition: transform .15s, box-shadow .15s;
+      outline: none;
+    }
+    .btn-vote:active { transform: scale(.97); box-shadow: 0 1px 8px rgba(0,0,0,.12);}
+    .btn-vote.left    { background: #4d73e8; color: #fff;}
+    .btn-vote.straight{ background: #2ecc71; color: #fff;}
+    .btn-vote.right   { background: #ffc43c; color: #222;}
+    #mainBtns {
+      display: flex; flex-direction: row; justify-content: center; gap: 3vw; width: 100vw; margin-top: 0;
+    }
+    .btn-main {
+      font-size: 17px; font-weight: bold; border: none; border-radius: 12px;
+      padding: 11px 4vw; margin: 0; cursor: pointer; min-width: 66px; min-height: 44px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.08);
+      outline: none; transition: background .2s, transform .13s;
+      display: flex; align-items: center; justify-content: center;
+      letter-spacing: .5px;
+    }
+    .btn-main:active { transform: scale(.97);}
+    .btn-main.start  { background: #3498db; color: #fff;}
+    .btn-main.drive  { background: #26a96e; color: #fff;}
+    .btn-main.back   { background: #ff9100; color: #fff;}
+    .btn-main.radio  { background: #4ecbfa; color: #111; gap: 7px;}
+    .btn-main.map    { background: #3498db; color: #fff;}
+    @media (max-width: 600px) {
+      html, body { font-size: 16px; }
+      #voteBtns, #mainBtns { flex-wrap: nowrap; gap: 2vw; }
+      .btn-vote, .btn-main { font-size: 18px; padding: 10px 2vw; min-width: 40px; min-height: 32px;}
+      #voteResults { font-size: 13px;}
+      #timerLabel { font-size: 13px;}
+    }
+    @media (max-width:400px) {
+      #headerBar, #topPanel { font-size: 13px;}
+      .btn-main, .btn-vote { font-size: 15px; min-height: 30px;}
     }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -49,17 +129,14 @@
     </select>
     <span id="voteResults">Влево: 0 | ↑: 0 | Вправо: 0</span>
   </div>
-
   <div id="topPanel">
     <div id="timerLabel" style="display:none"></div>
   </div>
-
   <div id="mapPopup">
     <button id="hideMapBtn">Скрыть карту ▲</button>
     <div id="mapCanvas"></div>
   </div>
   <div id="street-view"></div>
-
   <div id="controls">
     <div id="voteBtns">
       <button class="btn-vote left" data-dir="left">←</button>
@@ -74,8 +151,8 @@
       <button class="btn-main map">Карта</button>
     </div>
   </div>
-
   <script>
+    // === твой код логики без изменений ===
     const API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
     const BASE_URL = "https://qsdaooxywznloogyheyu.supabase.co";
     const CITIES = {
@@ -84,20 +161,16 @@
       Dresden: { lat: 51.0504, lng: 13.7373 },
       Novorossiysk: { lat: 44.7236, lng: 37.7689 }
     };
-
     let selectedCity = localStorage.getItem("selectedCity") || "Berlin";
     document.getElementById("citySelect").value = selectedCity;
-
     let panorama, streetMap, mapPopup, mapRoutePath;
     let votes = { left: 0, straight: 0, right: 0 };
     let timerValue = 0, timerActive = false, timerInterval = null;
     let routeHistory = {};
-
     window.onload = () => {
       Telegram.WebApp.ready();
       initApp();
     };
-
     async function initApp() {
       panorama = new google.maps.StreetViewPanorama(
         document.getElementById('street-view'),
@@ -116,7 +189,6 @@
       mapRoutePath.setMap(mapPopup);
       routeHistory[selectedCity] = [CITIES[selectedCity]];
       syncCity(selectedCity);
-
       document.querySelector('.btn-main.map').onclick = showMapPopup;
       document.getElementById('hideMapBtn').onclick = hideMapPopup;
       document.getElementById('citySelect').onchange = function(e) {
@@ -137,7 +209,6 @@
       updateVotes();
       drawRouteOnMap();
     }
-
     function syncCity(city) {
       if (panorama) panorama.setPosition(CITIES[city]);
       if (mapPopup) mapPopup.setCenter(CITIES[city]);
@@ -146,7 +217,6 @@
       updateVotes();
       resetTimer();
     }
-
     async function updateVotes() {
       const url = `${BASE_URL}/rest/v1/votes_summary?select=direction,count&city=eq.${selectedCity}&mode=eq.voting`;
       const res = await fetch(url, { headers: { apikey: API_KEY } });
@@ -158,7 +228,6 @@
       const total = votes.left + votes.straight + votes.right;
       if (total > 0 && !timerActive) startTimer();
     }
-
     async function castVote(dir) {
       await fetch(`${BASE_URL}/functions/v1/cast_vote-ts`, {
         method: "POST",
@@ -171,7 +240,6 @@
       });
       updateVotes();
     }
-
     function startTimer() {
       timerValue = 5;
       timerActive = true;
@@ -191,7 +259,6 @@
       timerValue = 0;
       document.getElementById('timerLabel').style.display = "none";
     }
-
     async function drive() {
       resetTimer();
       let maxDir = Object.keys(votes).reduce((a, b) => votes[a] > votes[b] ? a : b);
@@ -224,7 +291,6 @@
       });
       updateVotes();
     }
-
     function findBestLink(dir) {
       const pov = panorama.getPov().heading;
       const links = panorama.getLinks() || [];
@@ -239,7 +305,6 @@
       if (!best.link) throw new Error('Нет подходящего поворота');
       return best.link;
     }
-
     async function resetToStart(city) {
       panorama.setPosition(CITIES[city]);
       panorama.setPov({ heading: 0, pitch: 0 });
@@ -255,13 +320,11 @@
       });
       updateVotes();
     }
-
     function drawRouteOnMap() {
       if (!routeHistory[selectedCity]) return;
       mapRoutePath.setPath(routeHistory[selectedCity]);
       mapPopup.setCenter(routeHistory[selectedCity][routeHistory[selectedCity].length - 1]);
     }
-
     function showMapPopup() {
       document.getElementById("mapPopup").style.display = "flex";
       mapPopup.setCenter(routeHistory[selectedCity][routeHistory[selectedCity].length - 1]);
