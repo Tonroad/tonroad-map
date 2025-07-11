@@ -242,7 +242,32 @@
       }
 
       const app = new AppController();
-      setInterval(() => app.voteMgr.load(), 5000);
+      setInterval(() => app.voteMgr.load(), 2000);
+// === ДОБАВЛЯЕМ АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ КООРДИНАТ ===
+
+setInterval(async () => {
+  const city = app.voteMgr.city;
+  // Загружаем актуальные координаты из Supabase
+  const url = `${BASE_URL}/rest/v1/current_position?city=eq.${city}&select=lat,lng,heading&limit=1`;
+  const response = await fetch(url, { headers: { apikey: API_KEY } });
+  const data = await response.json();
+  if (data.length) {
+    const { lat, lng, heading } = data[0];
+    const current = app.mapMgr.getPosition();
+    // Обновляем только если координаты изменились (во избежание лишней перерисовки)
+    if (
+      Math.abs(current.lat - lat) > 1e-6 ||
+      Math.abs(current.lng - lng) > 1e-6 ||
+      Math.abs(current.heading - heading) > 1e-2
+    ) {
+      app.mapMgr.panorama.setPosition({ lat, lng });
+      app.mapMgr.panorama.setPov({ heading, pitch: 0 });
+      updateCoordsDisplay(lat, lng, heading);
+    }
+  }
+}, 2000); // обновлять каждые 5 секунд
+
+
     }
   </script>
 </body>
