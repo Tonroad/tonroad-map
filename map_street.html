@@ -20,6 +20,7 @@
     #backButton { bottom:20px; right:10px; background:orange; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
     .vote-buttons { position:absolute; bottom:20px; left:10px; z-index:1002; }
     .vote-buttons button { margin-right:5px; padding:8px 12px; }
+    .hidden { display: none !important; }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8" async defer></script>
@@ -267,9 +268,11 @@
           this.timerInterval = null;
 
           this.setupUI();
+          this.updateModeUI();
         }
 
         setupUI() {
+          document.getElementById('modeLabel').addEventListener('click', () => this.toggleMode());
           document.getElementById('citySelect').value = this.voteMgr.city;
           document.getElementById('citySelect').addEventListener('change', async e => {
             this.voteMgr.city = e.target.value;
@@ -277,22 +280,39 @@
             await this.mapMgr.loadPositionFromServer(e.target.value);
             await this.voteMgr.load();
             await this.updateNextCoordsDisplay(e.target.value);
-            this.stopDriveCountdown(); // при смене города сбрасываем таймер
-            this.lastVotesString = ""; // сброс сравнения голосов при смене города
+            this.stopDriveCountdown();
+            this.lastVotesString = "";
           });
           document.querySelectorAll('.vote-buttons button').forEach(btn =>
             btn.addEventListener('click', () => this.voteMgr.vote(btn.dataset.dir))
           );
-          document.getElementById('driveButton').addEventListener('click', () => this.drive(true)); // true = ручной запуск
+          document.getElementById('driveButton').addEventListener('click', () => this.drive(true));
+        }
+
+        toggleMode() {
+          this.mode = this.mode === "voting" ? "free" : "voting";
+          this.voteMgr.mode = this.mode;
+          this.stopDriveCountdown();
+          this.lastVotesString = "";
+          this.updateModeUI();
+        }
+
+        updateModeUI() {
+          const voting = this.mode === "voting";
+          document.getElementById('modeLabel').textContent = voting ? "Режим: Голосование" : "Режим: Свободно";
+          document.getElementById('modeLabel').style.background = voting ? "red" : "green";
+          document.getElementById('voteResults').classList.toggle("hidden", !voting);
+          document.getElementById('nextCoordsDisplay').classList.toggle("hidden", !voting);
+          document.getElementById('timerDisplay').classList.toggle("hidden", !voting);
+          document.getElementById('driveButton').classList.toggle("hidden", !voting);
+          document.querySelector('.vote-buttons').classList.toggle("hidden", !voting);
+          this.mapMgr.setInteraction(!voting);
         }
 
         async handleVoteChange(votes) {
-          // --- сравнение с прошлым состоянием голосов ---
+          if (this.mode !== "voting") return;
           const votesString = JSON.stringify(votes);
-          if (votesString === this.lastVotesString) {
-            // Таймер не сбрасываем!
-            return;
-          }
+          if (votesString === this.lastVotesString) return;
           this.lastVotesString = votesString;
 
           const total = Object.values(votes).reduce((a, b) => a + b, 0);
@@ -304,12 +324,14 @@
           await this.mapMgr.saveNextPositionToServer(this.voteMgr.city, maxDir);
           await this.updateNextCoordsDisplay(this.voteMgr.city);
 
-          // === Автоматический запуск "ЕХАТЬ" ===
           this.startDriveCountdown();
         }
 
-        // Показываем будущее положение
         async updateNextCoordsDisplay(city) {
+          if (this.mode !== "voting") {
+            document.getElementById('nextCoordsDisplay').textContent = '';
+            return;
+          }
           const next = await this.mapMgr.loadNextPositionFromServer(city);
           if (next) {
             document.getElementById('nextCoordsDisplay').textContent =
@@ -319,9 +341,8 @@
           }
         }
 
-        // Таймер отсчёта до авто-движения
         startDriveCountdown() {
-          this.stopDriveCountdown(); // сбрасываем если уже был
+          this.stopDriveCountdown();
           this.driveTimerValue = 5;
           document.getElementById('timerDisplay').textContent = `Поедем через: ${this.driveTimerValue}`;
           this.timerInterval = setInterval(() => {
@@ -330,7 +351,7 @@
               document.getElementById('timerDisplay').textContent = `Поедем через: ${this.driveTimerValue}`;
             } else {
               this.stopDriveCountdown();
-              this.drive(false); // false = автоматический запуск
+              this.drive(false);
             }
           }, 1000);
         }
@@ -342,6 +363,7 @@
 
         async drive(isManual) {
           this.stopDriveCountdown();
+          if (this.mode !== "voting") return;
           const moved = await this.mapMgr.goToNextPosition(this.voteMgr.city);
           if (!moved) {
             this.voteMgr.displayEl.textContent = 'Нет будущей координаты для движения';
@@ -387,4 +409,5 @@
   </script>
 </body>
 </html>
+
 
