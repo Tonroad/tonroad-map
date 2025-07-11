@@ -39,6 +39,8 @@
     .control-row .radio-btn { background:#10a0e9; }
     .mode-label { position:absolute; left:14px; top:14px; background:red; color:#fff; padding:5px 10px; border-radius:4px; z-index:12001;}
     #citySelect { position:absolute; right:18px; top:12px; z-index:12001; padding:7px 10px; font-size:16px; border-radius:5px; background:#314b3e; color:#fff;}
+    /* ———— Важно! Скрываем красную плашку режима ———— */
+    #modeLabel { display: none !important; }
     @media (max-width:600px) {
       .vote-row button, .control-row button, .control-row a { font-size:15px; padding:9px 10px;}
       #drawerToggle { font-size:14px; padding:5px 10px;}
@@ -384,4 +386,5 @@
   </script>
 </body>
 </html>
+
 
