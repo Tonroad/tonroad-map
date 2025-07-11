@@ -6,12 +6,12 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js"></script>
   <style>
-    body { font-family: sans-serif; margin: 0; padding: 0; }
+    body { font-family: sans-serif; margin: 0; padding: 0; background-color: #1c1c2e; color: white; }
     #map, #pano { height: 50vh; width: 100%; }
     #controls { padding: 1em; text-align: center; }
-    .btn { padding: 1em 2em; margin: 0.5em; font-size: 1.2em; cursor: pointer; }
+    .btn { padding: 1em 2em; margin: 0.5em; font-size: 1.2em; cursor: pointer; border-radius: 10px; border: none; }
     #status, #votes, #position, #modeToggle { margin-top: 1em; font-weight: bold; }
-    #routeInfo { font-size: 0.9em; color: gray; }
+    #routeInfo { font-size: 0.9em; color: #ccc; }
   </style>
 </head>
 <body>
@@ -32,162 +32,166 @@
     <div id="status"></div>
     <div id="routeInfo"></div>
   </div>  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8"></script>  <script>
-    const supabaseUrl = "https://qsdaooxywznloogygheyu.supabase.co";
-    const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
-    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
-    const city = "Novorossiysk";
-    const mode = "default";
-    let voted = false;
-    let votingMode = true;
-    let map, panorama, polyline;
-    let currentLat = 44.7238, currentLng = 37.7689, heading = 0;
-    let route = [];
+    (() => {
+      const supabaseUrl = "https://qsdaooxywznloogygheyu.supabase.co";
+      const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
+      const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+      const city = "Novorossiysk";
+      const mode = "default";
 
-    function updateRoutePolyline() {
-      if (!polyline) {
-        polyline = new google.maps.Polyline({
-          path: route,
-          geodesic: true,
-          strokeColor: "#FF0000",
-          strokeOpacity: 1.0,
-          strokeWeight: 2,
-        });
-        polyline.setMap(map);
-      } else {
-        polyline.setPath(route);
+      let voted = false;
+      let votingMode = true;
+      let map, panorama, polyline;
+      let currentLat = 44.7238, currentLng = 37.7689, heading = 0;
+      let route = [];
+
+      function updateRoutePolyline() {
+        if (!polyline) {
+          polyline = new google.maps.Polyline({
+            path: route,
+            geodesic: true,
+            strokeColor: "#00ff88",
+            strokeOpacity: 1.0,
+            strokeWeight: 2,
+          });
+          polyline.setMap(map);
+        } else {
+          polyline.setPath(route);
+        }
+        document.getElementById("routeInfo").innerText = `Путь точек: ${route.length}`;
       }
-      document.getElementById("routeInfo").innerText = `Путь точек: ${route.length}`;
-    }
 
-    function toggleMode() {
-      votingMode = !votingMode;
-      document.getElementById("modeToggle").innerText = "Режим: " + (votingMode ? "голосование" : "свободный");
-    }
+      function toggleMode() {
+        votingMode = !votingMode;
+        document.getElementById("modeToggle").innerText = "Режим: " + (votingMode ? "голосование" : "свободный");
+      }
 
-    async function loadPosition() {
-      const { data } = await supabase.from('current_position').select('*').eq('city', city).single();
-      if (data) {
-        currentLat = data.lat;
-        currentLng = data.lng;
-        heading = data.heading;
+      async function loadPosition() {
+        const { data } = await supabase.from('current_position').select('*').eq('city', city).single();
+        if (data) {
+          currentLat = data.lat;
+          currentLng = data.lng;
+          heading = data.heading;
+          updatePositionUI();
+          updateMap();
+        }
+      }
+
+      function updatePositionUI() {
+        document.getElementById("position").innerText = `Текущая позиция: ${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}, heading: ${heading}`;
+      }
+
+      function updateMap() {
+        const position = { lat: currentLat, lng: currentLng };
+        if (!map || !panorama) return;
+        map.setCenter(position);
+        panorama.setPosition(position);
+        panorama.setPov({ heading, pitch: 0 });
+      }
+
+      function initMap() {
+        const position = { lat: currentLat, lng: currentLng };
+        map = new google.maps.Map(document.getElementById("map"), {
+          center: position,
+          zoom: 16,
+          disableDefaultUI: true,
+        });
+        panorama = new google.maps.StreetViewPanorama(
+          document.getElementById("pano"), {
+            position,
+            pov: {
+              heading: heading,
+              pitch: 0,
+            },
+          });
+        map.setStreetView(panorama);
+        route.push(position);
+        updateRoutePolyline();
+      }
+
+      async function castVote(direction) {
+        if (!votingMode) {
+          document.getElementById("status").innerText = "Вы в свободном режиме.";
+          return;
+        }
+        if (voted) {
+          document.getElementById("status").innerText = "Вы уже проголосовали. Ожидайте следующего движения.";
+          return;
+        }
+        voted = true;
+        const { error } = await supabase.rpc('cast_vote_ts', {
+          p_city: city,
+          p_mode: mode,
+          p_direction: direction,
+        });
+        if (!error) {
+          document.getElementById("status").innerText = `Голос за '${direction}' принят!`;
+          loadVotes();
+        }
+      }
+
+      async function loadVotes() {
+        const { data } = await supabase.from('votes_summary').select('*').eq('city', city).eq('mode', mode);
+        if (data) {
+          const votes = { left: 0, straight: 0, right: 0 };
+          data.forEach(row => {
+            votes[row.direction] = row.count;
+          });
+          document.getElementById("votes").innerText = `Голоса: ⬅️ ${votes.left} | ⬆️ ${votes.straight} | ➡️ ${votes.right}`;
+        }
+      }
+
+      async function moveCar() {
+        if (!votingMode) {
+          heading = (heading + 90) % 360;
+        } else {
+          const { data } = await supabase.from('votes_summary').select('*').eq('city', city).eq('mode', mode);
+          if (!data || data.length === 0) return;
+          let maxDir = 'straight';
+          let maxVal = -1;
+          data.forEach(row => {
+            if (row.count > maxVal) {
+              maxVal = row.count;
+              maxDir = row.direction;
+            }
+          });
+          switch (maxDir) {
+            case 'left': heading -= 90; break;
+            case 'right': heading += 90; break;
+          }
+          heading = (heading + 360) % 360;
+        }
+
+        const rad = heading * Math.PI / 180;
+        const step = 0.0005;
+        currentLat += Math.cos(rad) * step;
+        currentLng += Math.sin(rad) * step;
+
+        const newPosition = { lat: currentLat, lng: currentLng };
+        route.push(newPosition);
+        updateRoutePolyline();
+
+        await supabase.from('current_position').upsert({ city, lat: currentLat, lng: currentLng, heading });
+        await supabase.rpc('reset_votes', { p_city: city, p_mode: mode });
+        voted = false;
         updatePositionUI();
         updateMap();
-      }
-    }
-
-    function updatePositionUI() {
-      document.getElementById("position").innerText = `Текущая позиция: ${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}, heading: ${heading}`;
-    }
-
-    function updateMap() {
-      const position = { lat: currentLat, lng: currentLng };
-      if (!map || !panorama) return;
-      map.setCenter(position);
-      panorama.setPosition(position);
-      panorama.setPov({ heading, pitch: 0 });
-    }
-
-    function initMap() {
-      const position = { lat: currentLat, lng: currentLng };
-      map = new google.maps.Map(document.getElementById("map"), {
-        center: position,
-        zoom: 16,
-        disableDefaultUI: true,
-      });
-      panorama = new google.maps.StreetViewPanorama(
-        document.getElementById("pano"), {
-          position,
-          pov: {
-            heading: heading,
-            pitch: 0,
-          },
-        });
-      map.setStreetView(panorama);
-      route.push(position);
-      updateRoutePolyline();
-    }
-
-    async function castVote(direction) {
-      if (!votingMode) {
-        document.getElementById("status").innerText = "Вы в свободном режиме.";
-        return;
-      }
-      if (voted) {
-        document.getElementById("status").innerText = "Вы уже проголосовали. Ожидайте следующего движения.";
-        return;
-      }
-      voted = true;
-      const { error } = await supabase.rpc('cast_vote_ts', {
-        p_city: city,
-        p_mode: mode,
-        p_direction: direction,
-      });
-      if (!error) {
-        document.getElementById("status").innerText = `Голос за '${direction}' принят!`;
         loadVotes();
       }
-    }
 
-    async function loadVotes() {
-      const { data } = await supabase.from('votes_summary').select('*').eq('city', city).eq('mode', mode);
-      if (data) {
-        const votes = { left: 0, straight: 0, right: 0 };
-        data.forEach(row => {
-          votes[row.direction] = row.count;
-        });
-        document.getElementById("votes").innerText = `Голоса: ⬅️ ${votes.left} | ⬆️ ${votes.straight} | ➡️ ${votes.right}`;
-      }
-    }
-
-    async function moveCar() {
-      if (!votingMode) {
-        heading = (heading + 90) % 360; // simulate rotation in free mode
-      } else {
-        const { data } = await supabase.from('votes_summary').select('*').eq('city', city).eq('mode', mode);
-        if (!data || data.length === 0) return;
-        let maxDir = 'straight';
-        let maxVal = -1;
-        data.forEach(row => {
-          if (row.count > maxVal) {
-            maxVal = row.count;
-            maxDir = row.direction;
-          }
-        });
-        switch (maxDir) {
-          case 'left': heading -= 90; break;
-          case 'right': heading += 90; break;
-        }
-        heading = (heading + 360) % 360;
-      }
-      const rad = heading * Math.PI / 180;
-      const step = 0.0005;
-      currentLat += Math.cos(rad) * step;
-      currentLng += Math.sin(rad) * step;
-
-      const newPosition = { lat: currentLat, lng: currentLng };
-      route.push(newPosition);
-      updateRoutePolyline();
-
-      await supabase.from('current_position').upsert({ city, lat: currentLat, lng: currentLng, heading });
-      await supabase.rpc('reset_votes', { p_city: city, p_mode: mode });
-      voted = false;
-      updatePositionUI();
-      updateMap();
-      loadVotes();
-    }
-
-    window.onload = async () => {
-      Telegram.WebApp.ready();
-      const tg = window.Telegram.WebApp;
-      tg.MainButton.setText("ЕХАТЬ");
-      tg.MainButton.onClick(moveCar);
-      tg.MainButton.show();
-      document.getElementById("modeToggle").onclick = toggleMode;
-      await loadPosition();
-      initMap();
-      loadVotes();
-      setInterval(loadVotes, 5000);
-      setInterval(loadPosition, 5000);
-    };
+      window.onload = async () => {
+        Telegram.WebApp.ready();
+        const tg = Telegram.WebApp;
+        tg.MainButton.setText("ЕХАТЬ");
+        tg.MainButton.show();
+        tg.MainButton.onClick(moveCar);
+        document.getElementById("modeToggle").onclick = toggleMode;
+        await loadPosition();
+        initMap();
+        loadVotes();
+        setInterval(loadVotes, 5000);
+        setInterval(loadPosition, 5000);
+      };
+    })();
   </script></body>
 </html>
