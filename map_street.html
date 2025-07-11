@@ -6,32 +6,33 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <style>
     html, body { margin:0; padding:0; height:100%; font-family:Arial,sans-serif; background:#263544; color:#fff; }
-    #headerBar { display:flex; align-items:center; gap:10px; padding:12px 8px 2px 8px; }
-    #cityLabel { font-size:22px; font-weight:bold; }
-    #citySelect { font-size:20px; padding:4px 12px; background:#26a96e; color:#fff; border:none; border-radius:8px; margin-right:10px; }
-    #modeLabel { background:#e74c3c; color:#fff; padding:9px 16px; border-radius:10px; font-size:22px; font-weight:bold; }
-    #voteResults { background:#222b38; color:#fff; padding:6px 15px; border-radius:10px; font-size:20px; font-weight:bold; margin-left:10px; }
-    #topPanel { display:flex; flex-direction:column; gap:10px; }
-    #mapPopup { position:fixed; top:0; left:0; width:100vw; height:38vh; background:#fff; z-index:2002; display:none; flex-direction:column; border-radius:0 0 30px 30px; box-shadow:0 8px 32px rgba(0,0,0,.33); }
-    #hideMapBtn { background:#19e074; color:#111; font-size:30px; font-weight:bold; padding:14px 0; border-radius:25px; border:none; margin:12px 20vw 0 20vw; cursor:pointer; }
-    #mapCanvas { width:100vw; height:25vh; border-radius:0 0 20px 20px; }
-    #street-view { width:100vw; height:44vh; }
-    #controls { width:100vw; display:flex; flex-direction:column; gap:13px; align-items:center; margin-top:8px; }
-    #voteBtns, #mainBtns { display:flex; flex-direction:row; justify-content:center; gap:12px; margin-bottom:0; }
-    .btn-vote { font-size:23px; font-weight:bold; border:none; border-radius:12px; padding:19px 23px; margin-bottom:0; cursor:pointer; }
+    #headerBar { display:flex; align-items:center; gap:5px; padding:4px 4px 2px 4px; }
+    #cityLabel { font-size:13px; font-weight:bold; }
+    #citySelect { font-size:12px; padding:1px 4px; background:#26a96e; color:#fff; border:none; border-radius:6px; }
+    #voteResults { background:#222b38; color:#fff; padding:1px 5px; border-radius:8px; font-size:12px; font-weight:bold; margin-left:5px; }
+    #topPanel { display:flex; flex-direction:column; gap:5px; }
+    #mapPopup { position:fixed; top:0; left:0; width:100vw; height:32vh; background:#fff; z-index:2002; display:none; flex-direction:column; border-radius:0 0 20px 20px; box-shadow:0 8px 32px rgba(0,0,0,.33); }
+    #hideMapBtn { background:#19e074; color:#111; font-size:13px; font-weight:bold; padding:5px 0; border-radius:12px; border:none; margin:6px 10vw 0 10vw; cursor:pointer; }
+    #mapCanvas { width:100vw; height:14vh; border-radius:0 0 10px 10px; }
+    #street-view { width:100vw; height:28vh; }
+    #controls { width:100vw; display:flex; flex-direction:column; gap:3px; align-items:center; margin-top:2px; }
+    #voteBtns { display:flex; flex-direction:row; justify-content:center; gap:2vw; margin-bottom:0; width:100vw; }
+    .btn-vote { font-size:13px; font-weight:bold; border:none; border-radius:8px; padding:4px 4vw; margin:0; cursor:pointer; min-width:38px; min-height:24px; }
     .btn-vote.left { background:#4d73e8; color:#fff; }
     .btn-vote.straight { background:#2ecc71; color:#fff; }
     .btn-vote.right { background:#ffc43c; color:#222; }
-    .btn-main { font-size:22px; font-weight:bold; border:none; border-radius:12px; padding:16px 23px; margin-top:0; cursor:pointer; }
+    #mainBtns { display:flex; flex-direction:row; justify-content:center; gap:1vw; margin-bottom:0; width:100vw; }
+    .btn-main { font-size:12px; font-weight:bold; border:none; border-radius:7px; padding:3px 2vw; margin:0; cursor:pointer; min-width:34px; min-height:22px;}
     .btn-main.start { background:#3498db; color:#fff; }
     .btn-main.drive { background:#26a96e; color:#fff; }
     .btn-main.back { background:#ff9100; color:#fff; }
-    .btn-main.radio { background:#4ecbfa; color:#111; display:flex; align-items:center; gap:6px; }
+    .btn-main.radio { background:#4ecbfa; color:#111; display:flex; align-items:center; gap:4px; }
     .btn-main.map { background:#3498db; color:#fff; }
-    #timerLabel { font-size:21px; background:#222b38; color:#19e074; border-radius:9px; padding:6px 18px; margin:8px 0 0 0; text-align:center; }
+    #timerLabel { font-size:11px; background:#222b38; color:#19e074; border-radius:5px; padding:2px 7px; margin:2px 0 0 0; text-align:center; }
     @media (max-width:600px) {
-      #voteBtns, #mainBtns { flex-wrap:wrap; gap:8px; }
-      .btn-vote, .btn-main { font-size:18px; padding:14px 8vw; }
+      #voteBtns, #mainBtns { flex-wrap:nowrap; gap:1vw; }
+      .btn-vote, .btn-main { font-size:11px; padding:2px 1.7vw; min-width:28px; min-height:18px;}
+      #voteResults { font-size:10px; }
     }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -46,8 +47,7 @@
       <option value="Dresden">Дрезден</option>
       <option value="Novorossiysk">Новороссийск</option>
     </select>
-    <span id="modeLabel">Режим: Голосование</span>
-    <span id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</span>
+    <span id="voteResults">Влево: 0 | ↑: 0 | Вправо: 0</span>
   </div>
 
   <div id="topPanel">
@@ -62,15 +62,15 @@
 
   <div id="controls">
     <div id="voteBtns">
-      <button class="btn-vote left" data-dir="left">← Влево</button>
-      <button class="btn-vote straight" data-dir="straight">↑ Прямо</button>
-      <button class="btn-vote right" data-dir="right">→ Вправо</button>
+      <button class="btn-vote left" data-dir="left">←</button>
+      <button class="btn-vote straight" data-dir="straight">↑</button>
+      <button class="btn-vote right" data-dir="right">→</button>
     </div>
     <div id="mainBtns">
       <button class="btn-main start">Старт</button>
       <button class="btn-main drive">ЕХАТЬ</button>
       <button class="btn-main back">Назад</button>
-      <button class="btn-main radio" onclick="window.open('https://t.me/fmusbot','_blank')">🎵 Радио</button>
+      <button class="btn-main radio" onclick="window.open('https://t.me/fmusbot','_blank')">🎵</button>
       <button class="btn-main map">Карта</button>
     </div>
   </div>
@@ -99,79 +99,51 @@
     };
 
     async function initApp() {
-      // STREET VIEW
       panorama = new google.maps.StreetViewPanorama(
         document.getElementById('street-view'),
         { position: CITIES[selectedCity], pov: { heading: 0, pitch: 0 }, visible: true }
       );
-
-      // КАРТА (ВСПЛЫВАЮЩАЯ)
       mapPopup = new google.maps.Map(document.getElementById('mapCanvas'), {
         center: CITIES[selectedCity], zoom: 14
       });
-
-      // МАРШРУТ НА КАРТЕ
       mapRoutePath = new google.maps.Polyline({
         path: [CITIES[selectedCity]],
         geodesic: true,
         strokeColor: "#f90",
         strokeOpacity: 1.0,
-        strokeWeight: 6
+        strokeWeight: 3
       });
       mapRoutePath.setMap(mapPopup);
-
-      // Загрузка истории маршрута (будет перезаписываться при смене города)
       routeHistory[selectedCity] = [CITIES[selectedCity]];
-
-      // Синхронизировать всё под выбранный город
       syncCity(selectedCity);
 
-      // ВСПЛЫВАЮЩАЯ КАРТА: ПОКАЗ/СКРЫТЬ
       document.querySelector('.btn-main.map').onclick = showMapPopup;
       document.getElementById('hideMapBtn').onclick = hideMapPopup;
-
-      // Смена города
       document.getElementById('citySelect').onchange = function(e) {
         selectedCity = e.target.value;
         localStorage.setItem("selectedCity", selectedCity);
         syncCity(selectedCity);
       };
-
-      // Кнопки голосования
       document.querySelectorAll('.btn-vote').forEach(btn =>
         btn.onclick = () => castVote(btn.dataset.dir)
       );
-
-      // Кнопка ЕХАТЬ
       document.querySelector('.btn-main.drive').onclick = () => drive();
-
-      // Кнопка Старт
       document.querySelector('.btn-main.start').onclick = async () => {
         await resetToStart(selectedCity);
       };
-
-      // Кнопка Назад
       document.querySelector('.btn-main.back').onclick = () => Telegram.WebApp.close();
-
-      // Таймер обновления голосов и маршрута
       setInterval(updateVotes, 2000);
       setInterval(drawRouteOnMap, 3000);
-
-      // Первый запуск
       updateVotes();
       drawRouteOnMap();
     }
 
     function syncCity(city) {
-      // Синхронизировать Street View и карту
       if (panorama) panorama.setPosition(CITIES[city]);
       if (mapPopup) mapPopup.setCenter(CITIES[city]);
-      // Сбросить маршрут
       routeHistory[city] = [CITIES[city]];
       mapRoutePath.setPath([CITIES[city]]);
-      // Обновить голоса
       updateVotes();
-      // Сбросить таймер
       resetTimer();
     }
 
@@ -182,8 +154,7 @@
       votes = { left: 0, straight: 0, right: 0 };
       data.forEach(v => votes[v.direction] = v.count);
       document.getElementById("voteResults").textContent =
-        `Влево: ${votes.left} | Прямо: ${votes.straight} | Вправо: ${votes.right}`;
-      // Старт таймера при первом голосе
+        `Влево: ${votes.left} | ↑: ${votes.straight} | Вправо: ${votes.right}`;
       const total = votes.left + votes.straight + votes.right;
       if (total > 0 && !timerActive) startTimer();
     }
@@ -223,10 +194,8 @@
 
     async function drive() {
       resetTimer();
-      // Выбор направления по максимуму
       let maxDir = Object.keys(votes).reduce((a, b) => votes[a] > votes[b] ? a : b);
       if (votes[maxDir] === 0) return;
-      // Найти лучший поворот в Street View
       let bestLink;
       try {
         bestLink = findBestLink(maxDir);
@@ -234,20 +203,17 @@
         alert("Нет подходящего направления для движения!");
         return;
       }
-      // Перейти к следующей позиции в Street View
       let svService = new google.maps.StreetViewService();
       svService.getPanorama({ pano: bestLink.pano }, (data, status) => {
         if (status === google.maps.StreetViewStatus.OK) {
           const nextLatLng = data.location.latLng;
           panorama.setPosition(nextLatLng);
           panorama.setPov({ heading: bestLink.heading, pitch: 0 });
-          // Добавить в историю маршрута
           if (!routeHistory[selectedCity]) routeHistory[selectedCity] = [];
           routeHistory[selectedCity].push({ lat: nextLatLng.lat(), lng: nextLatLng.lng() });
           drawRouteOnMap();
         }
       });
-      // Сбросить голоса
       await fetch(`${BASE_URL}/rest/v1/votes_summary?city=eq.${selectedCity}&mode=eq.voting`, {
         method: "PATCH",
         headers: {
