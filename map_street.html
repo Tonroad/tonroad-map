@@ -24,24 +24,20 @@
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8" async defer></script>
 
   <script>
-    // ───── Глобальные константы ─────
+    // === Константы Supabase ===
     const SUPA_URL = "https://qsdaooxywznloogyheyu.supabase.co";
     const SUPA_HEADERS = {
-      "apikey":        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…l8Do",
-      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…l8Do",
+      "apikey":        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…l8Do",
+      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…l8Do",
       "Content-Type":  "application/json"
     };
 
     window.onload = () => {
       Telegram.WebApp.ready();
-      initApp();
+      new AppController();
     };
 
-    function initApp() {
-      window.app = new AppController();
-    }
-
-    // ───── MapManager ─────
+    // === MapManager ===
     class MapManager {
       constructor(mapEl, streetEl, cities) {
         this.cities = cities;
@@ -89,7 +85,7 @@
       }
     }
 
-    // ───── VoteManager ─────
+    // === VoteManager ===
     class VoteManager {
       constructor(city, mode, displayEl) {
         this.city = city;
@@ -97,12 +93,11 @@
         this.displayEl = displayEl;
         this.votes = { left:0, straight:0, right:0 };
       }
-
       async load() {
         try {
           const url = `${SUPA_URL}/rest/v1/votes_summary?select=direction,count&city=eq.${this.city}&mode=eq.${this.mode}`;
-          const resp = await fetch(url, { headers: SUPA_HEADERS });
-          const arr = await resp.json();
+          const r = await fetch(url, { headers: SUPA_HEADERS });
+          const arr = await r.json();
           this.votes = { left:0, straight:0, right:0 };
           arr.forEach(v => this.votes[v.direction] = v.count);
           this.updateDisplay();
@@ -110,7 +105,6 @@
           console.error("Ошибка загрузки голосов", e);
         }
       }
-
       async vote(dir) {
         this.votes[dir] ++;
         this.updateDisplay();
@@ -118,156 +112,149 @@
           await fetch(`${SUPA_URL}/functions/v1/cast_vote-ts`, {
             method: "POST",
             headers: SUPA_HEADERS,
-            body: JSON.stringify({
-              city: this.city,
-              mode: this.mode,
-              direction: dir
-            })
+            body: JSON.stringify({ city:this.city, mode:this.mode, direction:dir })
           });
-          await this.load();  // сразу подтягиваем новую общую статистику
-        } catch (e) {
+          await this.load(); // сразу обновляем статистику
+        } catch(e){
           console.error("Ошибка отправки голоса", e);
         }
       }
-
       updateDisplay() {
-        this.displayEl.textContent =
+        this.displayEl.textContent = 
           `Влево: ${this.votes.left} | Прямо: ${this.votes.straight} | Вправо: ${this.votes.right}`;
       }
-
       reset() {
         this.votes = { left:0, straight:0, right:0 };
         this.updateDisplay();
       }
     }
 
-    // ───── AppController ─────
+    // === AppController ===
     class AppController {
-      constructor() {
+      constructor(){
         this.cities = {
-          Berlin:       { lat:52.52,    lng:13.405 },
-          Leipzig:      { lat:51.3397,  lng:12.3731 },
-          Dresden:      { lat:51.0504,  lng:13.7373 },
-          Novorossiysk: { lat:44.7236,  lng:37.7689 }
+          Berlin:       {lat:52.52,   lng:13.405},
+          Leipzig:      {lat:51.3397, lng:12.3731},
+          Dresden:      {lat:51.0504, lng:13.7373},
+          Novorossiysk: {lat:44.7236, lng:37.7689}
         };
         this.mode = "voting";
-        this.mapMgr  = new MapManager(
+
+        this.mapMgr = new MapManager(
           document.getElementById("map"),
           document.getElementById("street-view"),
           this.cities
         );
-        const saved = localStorage.getItem("selectedCity") || "Berlin";
+
+        const savedCity = localStorage.getItem("selectedCity") || "Berlin";
         this.voteMgr = new VoteManager(
-          saved,
+          savedCity,
           this.mode,
           document.getElementById("voteResults")
         );
-        this.mapMgr.setCity(saved);
 
+        this.mapMgr.setCity(savedCity);
         this.setupUI();
 
-        // первоначальная загрузка
+        // начальная загрузка
         this.voteMgr.load();
         this.loadPosition();
         this.updateOverlay();
 
-        // интервал синхронизации
-        setInterval(() => {
+        // синхро по таймеру
+        setInterval(()=>{
           this.voteMgr.load();
           this.loadPosition();
         }, 5000);
       }
 
-      setupUI() {
+      setupUI(){
         document.getElementById("modeLabel")
-          .addEventListener("click", () => this.toggleMode());
+          .addEventListener("click", ()=>this.toggleMode());
         document.getElementById("citySelect")
-          .addEventListener("change", e => {
+          .addEventListener("change", e=>{
             this.mapMgr.setCity(e.target.value);
             this.voteMgr.city = e.target.value;
             localStorage.setItem("selectedCity", e.target.value);
             this.voteMgr.reset();
           });
         document.querySelectorAll(".vote-buttons button")
-          .forEach(b =>
-            b.addEventListener("click", () => this.voteMgr.vote(b.dataset.dir))
-          );
+          .forEach(b=> b.addEventListener("click", ()=>this.voteMgr.vote(b.dataset.dir)));
         document.getElementById("driveButton")
-          .addEventListener("click", () => this.drive());
+          .addEventListener("click", ()=>this.drive());
         document.getElementById("backButton")
-          .addEventListener("click", () => window.location.href = "map.html");
+          .addEventListener("click", ()=>location.href="map.html");
       }
 
-      toggleMode() {
-        this.mode = this.mode === "voting" ? "free" : "voting";
+      toggleMode(){
+        this.mode = this.mode==="voting"?"free":"voting";
         const lbl = document.getElementById("modeLabel");
-        lbl.textContent = `Режим: ${this.mode === "voting" ? "Голосование" : "Свободная езда"}`;
-        lbl.style.background = this.mode === "voting" ? "red" : "green";
+        lbl.textContent = `Режим: ${this.mode==="voting"?"Голосование":"Свободная езда"}`;
+        lbl.style.background = this.mode==="voting"?"red":"green";
         this.voteMgr.mode = this.mode;
         this.voteMgr.reset();
         this.updateOverlay();
       }
 
-      updateOverlay() {
-        const on = this.mode !== "voting";
-        document.getElementById("streetOverlay").style.display = on ? "none" : "block";
+      updateOverlay(){
+        const on = this.mode!=="voting";
+        document.getElementById("streetOverlay").style.display = on?"none":"block";
         this.mapMgr.setInteraction(on);
       }
 
-      // ─── синхронизировать и показать координаты ───
-      async loadPosition() {
+      // синхронизация общих coords
+      async loadPosition(){
         try {
           const url = `${SUPA_URL}/rest/v1/current_position?select=lat,lng&id=eq.1`;
-          const resp = await fetch(url, { headers: SUPA_HEADERS });
-          const arr  = await resp.json();
-          if (arr.length) {
-            const { lat, lng } = arr[0];
-            this.mapMgr.setCityPosition(lat, lng);
+          const r = await fetch(url, { headers: SUPA_HEADERS });
+          const arr = await r.json();
+          if(arr.length){
+            const {lat,lng} = arr[0];
+            this.mapMgr.setCityPosition(lat,lng);
             document.getElementById("coordsDisplay").textContent =
               `Координаты: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
           }
-        } catch (e) {
+        } catch(e){
           console.error("Ошибка загрузки позиции", e);
         }
       }
 
-      // ─── движение, сброс голосов + синхронизация coords ───
-      async drive() {
-        if (this.mode !== "voting") return;
+      async drive(){
+        if(this.mode!=="voting") return;
         const total = Object.values(this.voteMgr.votes).reduce((a,b)=>a+b,0);
-        if (!total) {
+        if(!total){
           this.voteMgr.displayEl.textContent = "Нет голосов для движения";
           return;
         }
         const dir = Object.keys(this.voteMgr.votes)
-          .reduce((a,b)=> this.voteMgr.votes[a] > this.voteMgr.votes[b] ? a : b);
+          .reduce((a,b)=> this.voteMgr.votes[a]>this.voteMgr.votes[b]?a:b);
         try {
           this.mapMgr.rotateAndMove(dir);
           this.voteMgr.displayEl.textContent = `Вы поехали как большинство (${dir})`;
 
-          const pos = this.mapMgr.panorama.getPosition();
-          const lat = pos.lat(), lng = pos.lng();
-          // сразу показать coords всем
+          // получить новые coords
+          const p = this.mapMgr.panorama.getPosition();
+          const lat = p.lat(), lng = p.lng();
           document.getElementById("coordsDisplay").textContent =
             `Координаты: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 
-          // сохранить в Supabase
+          // сохранить общие coords
           await fetch(
             `${SUPA_URL}/rest/v1/current_position?id=eq.1`, {
-              method: "PATCH",
-              headers: SUPA_HEADERS,
-              body: JSON.stringify([{ lat, lng }])
+              method:"PATCH",
+              headers:SUPA_HEADERS,
+              body: JSON.stringify([{lat,lng}])
             }
           );
 
-          // удалить все старые голоса для текущей city/mode
+          // удалить все голоса до движения
           await fetch(
             `${SUPA_URL}/rest/v1/votes?city=eq.${this.voteMgr.city}&mode=eq.${this.mode}`, {
-              method: "DELETE",
-              headers: SUPA_HEADERS
+              method:"DELETE",
+              headers:SUPA_HEADERS
             }
           );
-        } catch (e) {
+        } catch(e){
           console.warn(e);
           this.voteMgr.displayEl.textContent = "Нет подходящего поворота";
         }
