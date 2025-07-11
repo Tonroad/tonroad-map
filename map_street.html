@@ -79,7 +79,7 @@
       box-shadow: 0 1px 8px rgba(0,0,0,.06);
       outline: none;
       background: #222b38; color: #fff;
-      transition: background .15s, transform .13s;
+      transition: background .15s, transform .13s, opacity .15s;
     }
     .btn-vote:active { background: #212e3e; transform: scale(.96);}
     .btn-vote.left    { background: #4d73e8; }
@@ -177,7 +177,6 @@
     </div>
   </div>
   <script>
-    // === логика без изменений ===
     const API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
     const BASE_URL = "https://qsdaooxywznloogyheyu.supabase.co";
     const CITIES = {
@@ -192,12 +191,22 @@
     let votes = { left: 0, straight: 0, right: 0 };
     let timerValue = 0, timerActive = false, timerInterval = null;
     let routeHistory = {};
+
+    // --- Блокировка кнопок голосования ---
+    function setVoteButtonsDisabled(disabled) {
+      document.querySelectorAll('.btn-vote').forEach(btn => {
+        btn.disabled = disabled;
+        btn.style.opacity = disabled ? '0.55' : '1';
+        btn.style.pointerEvents = disabled ? 'none' : 'auto';
+      });
+    }
+
     window.onload = () => {
       Telegram.WebApp.ready();
       initApp();
     };
+
     async function initApp() {
-      // === ВОТ ЭТОТ БЛОК ИЗМЕНЁН! ===
       panorama = new google.maps.StreetViewPanorama(
         document.getElementById('street-view'),
         {
@@ -213,7 +222,6 @@
           disableDefaultUI: true
         }
       );
-      // Ещё раз явно (для некоторых версий/устройств)
       panorama.setOptions({
         disableDefaultUI: true,
         linksControl: false,
@@ -256,7 +264,15 @@
       setInterval(drawRouteOnMap, 3000);
       updateVotes();
       drawRouteOnMap();
+
+      // Проверяем, не голосовал ли уже пользователь в этом городе
+      if (localStorage.getItem("voted_" + selectedCity) === "1") {
+        setVoteButtonsDisabled(true);
+      } else {
+        setVoteButtonsDisabled(false);
+      }
     }
+
     function syncCity(city) {
       if (panorama) panorama.setPosition(CITIES[city]);
       if (mapPopup) mapPopup.setCenter(CITIES[city]);
@@ -264,7 +280,14 @@
       mapRoutePath.setPath([CITIES[city]]);
       updateVotes();
       resetTimer();
+      // Тоже проверяем состояние голосования
+      if (localStorage.getItem("voted_" + city) === "1") {
+        setVoteButtonsDisabled(true);
+      } else {
+        setVoteButtonsDisabled(false);
+      }
     }
+
     async function updateVotes() {
       const url = `${BASE_URL}/rest/v1/votes_summary?select=direction,count&city=eq.${selectedCity}&mode=eq.voting`;
       const res = await fetch(url, { headers: { apikey: API_KEY } });
@@ -276,7 +299,10 @@
       const total = votes.left + votes.straight + votes.right;
       if (total > 0 && !timerActive) startTimer();
     }
+
     async function castVote(dir) {
+      // Блокируем повторное голосование
+      if (localStorage.getItem("voted_" + selectedCity) === "1") return;
       await fetch(`${BASE_URL}/functions/v1/cast_vote-ts`, {
         method: "POST",
         headers: {
@@ -286,8 +312,11 @@
         },
         body: JSON.stringify({ city: selectedCity, mode: "voting", direction: dir })
       });
+      localStorage.setItem("voted_" + selectedCity, "1");
+      setVoteButtonsDisabled(true);
       updateVotes();
     }
+
     function startTimer() {
       timerValue = 5;
       timerActive = true;
@@ -301,12 +330,14 @@
         }
       }, 1000);
     }
+
     function resetTimer() {
       if (timerInterval) clearInterval(timerInterval);
       timerActive = false;
       timerValue = 0;
       document.getElementById('timerLabel').style.display = "none";
     }
+
     async function drive() {
       resetTimer();
       let maxDir = Object.keys(votes).reduce((a, b) => votes[a] > votes[b] ? a : b);
@@ -337,8 +368,12 @@
         },
         body: JSON.stringify({ count: 0 })
       });
+      // После движения — разблокируем кнопки голосования
+      localStorage.removeItem("voted_" + selectedCity);
+      setVoteButtonsDisabled(false);
       updateVotes();
     }
+
     function findBestLink(dir) {
       const pov = panorama.getPov().heading;
       const links = panorama.getLinks() || [];
@@ -353,6 +388,7 @@
       if (!best.link) throw new Error('Нет подходящего поворота');
       return best.link;
     }
+
     async function resetToStart(city) {
       panorama.setPosition(CITIES[city]);
       panorama.setPov({ heading: 0, pitch: 0 });
@@ -366,18 +402,24 @@
         },
         body: JSON.stringify({ count: 0 })
       });
+      // После сброса — разблокируем кнопки голосования
+      localStorage.removeItem("voted_" + city);
+      setVoteButtonsDisabled(false);
       updateVotes();
     }
+
     function drawRouteOnMap() {
       if (!routeHistory[selectedCity]) return;
       mapRoutePath.setPath(routeHistory[selectedCity]);
       mapPopup.setCenter(routeHistory[selectedCity][routeHistory[selectedCity].length - 1]);
     }
+
     function showMapPopup() {
       document.getElementById("mapPopup").style.display = "flex";
       mapPopup.setCenter(routeHistory[selectedCity][routeHistory[selectedCity].length - 1]);
       google.maps.event.trigger(mapPopup, 'resize');
     }
+
     function hideMapPopup() {
       document.getElementById("mapPopup").style.display = "none";
     }
