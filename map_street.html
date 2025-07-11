@@ -3,16 +3,60 @@
 <head>
   <title>TonRoad Map Voting</title>
   <meta charset="utf-8" />
-  <meta name="viewport" content="initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Telegram + Supabase + Google Maps -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8"></script>
+
+  <style>
+    body {
+      background-color: #ffffff;
+      color: #000000;
+      font-family: Arial, sans-serif;
+      padding: 10px;
+      margin: 0;
+    }
+
+    h2, h3 {
+      margin-top: 15px;
+      margin-bottom: 10px;
+    }
+
+    #map, #pano {
+      width: 100%;
+      height: 300px;
+      margin-bottom: 15px;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    button {
+      padding: 10px 16px;
+      margin: 5px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+      background-color: #0088cc;
+      color: white;
+    }
+
+    #votes {
+      list-style-type: none;
+      padding-left: 0;
+    }
+
+    li {
+      margin-bottom: 5px;
+    }
+  </style>
 </head>
 <body>
   <h2>TonRoad Map Voting</h2>
 
-  <div id="map" style="height: 400px;"></div>
-  <div id="pano" style="height: 300px;"></div>
+  <div id="map"></div>
+  <div id="pano"></div>
 
   <div>
     <button onclick="castVote('left')">⬅️ Влево</button>
@@ -28,9 +72,10 @@
   <div id="current-coordinates">Загрузка...</div>
 
   <script>
-    const supabaseUrl = 'https://qsdaooxywznloogyehyu.supabase.co';
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do';
-    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+    const supabase = supabase.createClient(
+      'https://qsdaooxywznloogyehyu.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do'
+    );
 
     let map, panorama, marker;
     let currentCity = 'Novorossiysk';
@@ -54,27 +99,34 @@
     }
 
     function initMap(lat, lng, heading) {
-      const position = { lat: parseFloat(lat), lng: parseFloat(lng) };
-      map = new google.maps.Map(document.getElementById("map"), {
-        center: position,
-        zoom: 16
-      });
+      try {
+        const position = { lat: parseFloat(lat), lng: parseFloat(lng) };
 
-      marker = new google.maps.Marker({
-        position,
-        map,
-        title: "TonRoad Car"
-      });
+        map = new google.maps.Map(document.getElementById("map"), {
+          center: position,
+          zoom: 16
+        });
 
-      panorama = new google.maps.StreetViewPanorama(
-        document.getElementById("pano"),
-        {
+        marker = new google.maps.Marker({
           position,
-          pov: { heading: parseFloat(heading), pitch: 0 },
-          zoom: 1
-        }
-      );
-      map.setStreetView(panorama);
+          map,
+          title: "TonRoad Car"
+        });
+
+        panorama = new google.maps.StreetViewPanorama(
+          document.getElementById("pano"),
+          {
+            position,
+            pov: { heading: parseFloat(heading), pitch: 0 },
+            zoom: 1
+          }
+        );
+
+        map.setStreetView(panorama);
+      } catch (e) {
+        console.error('Ошибка инициализации карты:', e);
+        alert('Google Map не загрузилась.');
+      }
     }
 
     async function castVote(direction) {
@@ -83,7 +135,7 @@
         return;
       }
 
-      const { data, error } = await supabase.rpc('cast_vote_ts', {
+      const { error } = await supabase.rpc('cast_vote_ts', {
         city_name: currentCity,
         vote_direction: direction
       });
@@ -139,28 +191,29 @@
         }
       });
 
-      const { lat, lng, heading } = panorama.getLocation().latLng;
-      const newHeading = chosen === 'left' ? heading - 90 :
-                         chosen === 'right' ? heading + 90 : heading;
+      const loc = panorama.getLocation();
+      if (!loc || !loc.latLng) {
+        alert('Нет данных Street View.');
+        return;
+      }
+
+      const currentLatLng = loc.latLng;
+      let newHeading = panorama.getPov().heading;
+
+      if (chosen === 'left') newHeading -= 90;
+      else if (chosen === 'right') newHeading += 90;
 
       panorama.setPov({ heading: newHeading, pitch: 0 });
-      panorama.setVisible(true);
 
-      // Сохраняем новое положение
-      const loc = panorama.getLocation();
-      if (!loc || !loc.latLng) return;
+      const newLat = currentLatLng.lat();
+      const newLng = currentLatLng.lng();
 
-      const newLat = loc.latLng.lat();
-      const newLng = loc.latLng.lng();
-
-      await supabase
-        .from('current_position')
-        .upsert({
-          city: currentCity,
-          lat: newLat,
-          lng: newLng,
-          heading: newHeading
-        });
+      await supabase.from('current_position').upsert({
+        city: currentCity,
+        lat: newLat,
+        lng: newLng,
+        heading: newHeading
+      });
 
       document.getElementById("current-coordinates").innerText =
         `Lat: ${newLat}, Lng: ${newLng}, Heading: ${newHeading}`;
@@ -179,4 +232,3 @@
   </script>
 </body>
 </html>
-
