@@ -256,6 +256,7 @@
           this.mode = "voting";
           this.mapMgr = new MapManager(document.getElementById('map'), document.getElementById('street-view'), this.cities);
           const city = localStorage.getItem("selectedCity") || "Berlin";
+          this.lastVotesString = ""; // <--- для сравнения
           this.voteMgr = new VoteManager(city, this.mode, document.getElementById('voteResults'), (votes) => this.handleVoteChange(votes));
           this.mapMgr.loadPositionFromServer(city);
           this.voteMgr.load();
@@ -277,6 +278,7 @@
             await this.voteMgr.load();
             await this.updateNextCoordsDisplay(e.target.value);
             this.stopDriveCountdown(); // при смене города сбрасываем таймер
+            this.lastVotesString = ""; // сброс сравнения голосов при смене города
           });
           document.querySelectorAll('.vote-buttons button').forEach(btn =>
             btn.addEventListener('click', () => this.voteMgr.vote(btn.dataset.dir))
@@ -285,6 +287,14 @@
         }
 
         async handleVoteChange(votes) {
+          // --- сравнение с прошлым состоянием голосов ---
+          const votesString = JSON.stringify(votes);
+          if (votesString === this.lastVotesString) {
+            // Таймер не сбрасываем!
+            return;
+          }
+          this.lastVotesString = votesString;
+
           const total = Object.values(votes).reduce((a, b) => a + b, 0);
           if (total === 0) {
             this.stopDriveCountdown();
