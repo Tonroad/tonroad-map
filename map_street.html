@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8"/>
   <title>TonRoad Street View</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <style>
     html, body { margin:0; padding:0; height:100%; font-family:Arial,sans-serif; background:#2c3e50; color:#ecf0f1; }
     #map { height:30vh; width:100%; }
@@ -20,22 +20,56 @@
     .vote-buttons button { margin-right:5px; padding:8px 12px; }
   </style>
 
+  <!-- Telegram Web App SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Supabase JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Google Maps API -->
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8" async defer></script>
 
   <script>
     // === Константы Supabase ===
-    const SUPA_URL = "https://qsdaooxywznloogyheyu.supabase.co";
+    const SUPA_URL     = "https://qsdaooxywznloogyheyu.supabase.co";
+    const SUPA_APIKEY  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…l8Do";
     const SUPA_HEADERS = {
-      "apikey":        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…l8Do",
-      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…l8Do",
-      "Content-Type":  "application/json"
+      "apikey":       SUPA_APIKEY,
+      "Authorization":"Bearer " + SUPA_APIKEY,
+      "Content-Type": "application/json"
     };
+    // Инициализируем Supabase client для Realtime
+    const supabase = supabaseJs.createClient(SUPA_URL, SUPA_APIKEY);
 
     window.onload = () => {
       Telegram.WebApp.ready();
-      new AppController();
+      initApp();
     };
+
+    function initApp() {
+      // создаём контроллер
+      const app = new AppController();
+
+      // ===== realtime подписка на новые голоса =====
+      supabase
+        .channel('votes_'+app.voteMgr.city+'_'+app.mode)
+        .on('postgres_changes', {
+          event: 'INSERT', schema:'public', table:'votes',
+          filter: `city=eq.${app.voteMgr.city},mode=eq.${app.mode}`
+        }, () => app.voteMgr.load())
+        .subscribe();
+
+      // ===== realtime подписка на обновление координат =====
+      supabase
+        .channel('position')
+        .on('postgres_changes', {
+          event: 'UPDATE', schema:'public', table:'current_position',
+          filter: 'id=eq.1'
+        }, ({ new: row }) => {
+          app.mapMgr.setCityPosition(row.lat, row.lng);
+          document.getElementById('coordsDisplay').textContent =
+            `Координаты: ${row.lat.toFixed(6)}, ${row.lng.toFixed(6)}`;
+        })
+        .subscribe();
+    }
 
     // === MapManager ===
     class MapManager {
@@ -67,7 +101,7 @@
       }
       findBestLink(dir) {
         const pov = this.panorama.getPov().heading;
-        const links = this.panorama.getLinks() || [];
+        const links = this.panorama.getLinks()||[];
         const want = { straight:0, left:270, right:90 }[dir];
         let best = { diff: Infinity, link: null };
         links.forEach(l => {
@@ -99,28 +133,26 @@
           const r = await fetch(url, { headers: SUPA_HEADERS });
           const arr = await r.json();
           this.votes = { left:0, straight:0, right:0 };
-          arr.forEach(v => this.votes[v.direction] = v.count);
+          arr.forEach(v=> this.votes[v.direction] = v.count);
           this.updateDisplay();
-        } catch (e) {
+        } catch(e){
           console.error("Ошибка загрузки голосов", e);
         }
       }
       async vote(dir) {
-        this.votes[dir] ++;
-        this.updateDisplay();
+        this.votes[dir]++; this.updateDisplay();
         try {
           await fetch(`${SUPA_URL}/functions/v1/cast_vote-ts`, {
-            method: "POST",
-            headers: SUPA_HEADERS,
+            method:"POST", headers:SUPA_HEADERS,
             body: JSON.stringify({ city:this.city, mode:this.mode, direction:dir })
           });
-          await this.load(); // сразу обновляем статистику
+          // не нужен таймер — Realtime вызовет load()
         } catch(e){
           console.error("Ошибка отправки голоса", e);
         }
       }
-      updateDisplay() {
-        this.displayEl.textContent = 
+      updateDisplay(){
+        this.displayEl.textContent =
           `Влево: ${this.votes.left} | Прямо: ${this.votes.straight} | Вправо: ${this.votes.right}`;
       }
       reset() {
@@ -140,37 +172,28 @@
         };
         this.mode = "voting";
 
-        this.mapMgr = new MapManager(
+        this.mapMgr  = new MapManager(
           document.getElementById("map"),
           document.getElementById("street-view"),
           this.cities
         );
-
-        const savedCity = localStorage.getItem("selectedCity") || "Berlin";
+        const savedCity = localStorage.getItem("selectedCity")||"Berlin";
         this.voteMgr = new VoteManager(
-          savedCity,
-          this.mode,
-          document.getElementById("voteResults")
+          savedCity, this.mode, document.getElementById("voteResults")
         );
-
         this.mapMgr.setCity(savedCity);
+
         this.setupUI();
 
         // начальная загрузка
         this.voteMgr.load();
         this.loadPosition();
         this.updateOverlay();
-
-        // синхро по таймеру
-        setInterval(()=>{
-          this.voteMgr.load();
-          this.loadPosition();
-        }, 5000);
       }
 
       setupUI(){
         document.getElementById("modeLabel")
-          .addEventListener("click", ()=>this.toggleMode());
+          .addEventListener("click", ()=> this.toggleMode());
         document.getElementById("citySelect")
           .addEventListener("change", e=>{
             this.mapMgr.setCity(e.target.value);
@@ -179,11 +202,11 @@
             this.voteMgr.reset();
           });
         document.querySelectorAll(".vote-buttons button")
-          .forEach(b=> b.addEventListener("click", ()=>this.voteMgr.vote(b.dataset.dir)));
+          .forEach(b=> b.addEventListener("click", ()=> this.voteMgr.vote(b.dataset.dir)));
         document.getElementById("driveButton")
-          .addEventListener("click", ()=>this.drive());
+          .addEventListener("click", ()=> this.drive());
         document.getElementById("backButton")
-          .addEventListener("click", ()=>location.href="map.html");
+          .addEventListener("click", ()=> location.href="map.html");
       }
 
       toggleMode(){
@@ -202,11 +225,11 @@
         this.mapMgr.setInteraction(on);
       }
 
-      // синхронизация общих coords
+      // загрузка общих coords один раз
       async loadPosition(){
         try {
           const url = `${SUPA_URL}/rest/v1/current_position?select=lat,lng&id=eq.1`;
-          const r = await fetch(url, { headers: SUPA_HEADERS });
+          const r = await fetch(url, { headers:SUPA_HEADERS });
           const arr = await r.json();
           if(arr.length){
             const {lat,lng} = arr[0];
@@ -232,12 +255,9 @@
           this.mapMgr.rotateAndMove(dir);
           this.voteMgr.displayEl.textContent = `Вы поехали как большинство (${dir})`;
 
-          // получить новые coords
+          // взять новые coords
           const p = this.mapMgr.panorama.getPosition();
           const lat = p.lat(), lng = p.lng();
-          document.getElementById("coordsDisplay").textContent =
-            `Координаты: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-
           // сохранить общие coords
           await fetch(
             `${SUPA_URL}/rest/v1/current_position?id=eq.1`, {
@@ -246,8 +266,7 @@
               body: JSON.stringify([{lat,lng}])
             }
           );
-
-          // удалить все голоса до движения
+          // сбросить голоса
           await fetch(
             `${SUPA_URL}/rest/v1/votes?city=eq.${this.voteMgr.city}&mode=eq.${this.mode}`, {
               method:"DELETE",
