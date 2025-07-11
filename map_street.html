@@ -16,7 +16,7 @@
     }
     #app-container {
       display: flex; flex-direction: column;
-      height: 100dvh; /* Реально вся высота экрана, даже на мобилах с челкой и т.д. */
+      height: 100dvh;
       width: 100vw; box-sizing: border-box;
     }
     #headerBar {
@@ -47,7 +47,7 @@
     }
     #main-content {
       flex: 1 1 auto; display: flex; flex-direction: column;
-      min-height: 0; min-width: 0; /* Очень важно для 100% flex! */
+      min-height: 0; min-width: 0;
       overflow: hidden;
       position: relative;
     }
@@ -65,7 +65,7 @@
       width: 100vw;
       display: flex; flex-direction: column; gap: 6px; align-items: center;
       justify-content: flex-end;
-      padding-bottom: env(safe-area-inset-bottom, 12px); /* для айфонов с вырезом */
+      padding-bottom: env(safe-area-inset-bottom, 12px);
       background: linear-gradient(0deg, #263544e8 80%, transparent 100%);
       position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
     }
@@ -102,7 +102,6 @@
     .btn-main.back   { background: #ff9100; color: #fff;}
     .btn-main.radio  { background: #4ecbfa; color: #111; gap: 7px;}
     .btn-main.map    { background: #3498db; color: #fff;}
-    /* MAP POPUP */
     #mapPopup {
       position: fixed; top: 0; left: 0; width: 100vw; height: 38vh; background: #fff;
       z-index: 2002; display: none; flex-direction: column;
@@ -198,10 +197,33 @@
       initApp();
     };
     async function initApp() {
+      // === ВОТ ЭТОТ БЛОК ИЗМЕНЁН! ===
       panorama = new google.maps.StreetViewPanorama(
         document.getElementById('street-view'),
-        { position: CITIES[selectedCity], pov: { heading: 0, pitch: 0 }, visible: true }
+        {
+          position: CITIES[selectedCity],
+          pov: { heading: 0, pitch: 0 },
+          visible: true,
+          addressControl: false,
+          linksControl: false,
+          panControl: false,
+          zoomControl: false,
+          enableCloseButton: false,
+          showRoadLabels: false,
+          disableDefaultUI: true
+        }
       );
+      // Ещё раз явно (для некоторых версий/устройств)
+      panorama.setOptions({
+        disableDefaultUI: true,
+        linksControl: false,
+        panControl: false,
+        zoomControl: false,
+        addressControl: false,
+        showRoadLabels: false,
+        enableCloseButton: false,
+      });
+
       mapPopup = new google.maps.Map(document.getElementById('mapCanvas'), {
         center: CITIES[selectedCity], zoom: 14
       });
@@ -362,4 +384,3 @@
   </script>
 </body>
 </html>
-
