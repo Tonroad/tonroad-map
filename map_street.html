@@ -231,16 +231,35 @@
       });
     }
 
-    // --- Блокировка/разблокировка кликов по панораме ---
+    // --- Блокировка/разблокировка кликов и поворотов по панораме ---
+    let streetViewOrientationBlocked = true;
+
     function setStreetViewBlocked(blocked) {
       const blocker = document.getElementById('street-view-blocker');
       if (blocked) {
         blocker.style.display = '';
         document.getElementById('lockBtn').textContent = '🔒';
+        setStreetViewOrientationBlocked(true);
       } else {
         blocker.style.display = 'none';
         document.getElementById('lockBtn').textContent = '🔓';
+        setStreetViewOrientationBlocked(false);
       }
+    }
+
+    function setStreetViewOrientationBlocked(blocked) {
+      streetViewOrientationBlocked = blocked;
+      if (blocked) {
+        window.addEventListener("deviceorientation", fixPanoramaHeading, true);
+      } else {
+        window.removeEventListener("deviceorientation", fixPanoramaHeading, true);
+      }
+    }
+
+    function fixPanoramaHeading(e) {
+      if (!panorama) return;
+      const pov = panorama.getPov();
+      panorama.setPov({ heading: pov.heading, pitch: pov.pitch });
     }
 
     window.onload = () => {
@@ -307,7 +326,6 @@
       updateVotes();
       drawRouteOnMap();
 
-      // Проверяем, не голосовал ли уже пользователь в этом городе
       if (localStorage.getItem("voted_" + selectedCity) === "1") {
         setVoteButtonsDisabled(true);
       } else {
@@ -331,13 +349,11 @@
       mapRoutePath.setPath([CITIES[city]]);
       updateVotes();
       resetTimer();
-      // Тоже проверяем состояние голосования
       if (localStorage.getItem("voted_" + city) === "1") {
         setVoteButtonsDisabled(true);
       } else {
         setVoteButtonsDisabled(false);
       }
-      // При смене города — всегда блокируем панораму
       setStreetViewBlocked(true);
     }
 
