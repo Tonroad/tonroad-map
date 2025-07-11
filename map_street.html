@@ -100,7 +100,7 @@
           }
         }
 
-        // Новый метод! Сохраняем ИМЕННО координаты следующей точки!
+        // --- ВАЖНО: теперь savePositionToServer вызывается только после position_changed!
         async savePositionToServer(city, lat, lng, heading) {
           updateCoordsDisplay(lat, lng, heading);
           await fetch(`${BASE_URL}/rest/v1/current_position`, {
@@ -129,29 +129,20 @@
           return best.link;
         }
 
-        // Новый метод движения с точным сохранением координаты следующей точки
+        // !!! Сохраняем координаты только после события position_changed
         rotateAndMoveAndSave(dir, city, onMoved) {
           const link = this.findBestLink(dir);
-          const svService = new google.maps.StreetViewService();
-          svService.getPanorama({ pano: link.pano }, (data, status) => {
-            if (status === google.maps.StreetViewStatus.OK) {
-              const nextLatLng = data.location.latLng;
-              // Сначала анимируем поворот
-              this.panorama.setPov({ heading: link.heading, pitch: 0 });
-              setTimeout(() => {
-                this.panorama.setPano(link.pano);
-                // После смены pano (через задержку), Сохраняем НОВУЮ координату в Supabase
-                setTimeout(() => {
-                  if (typeof onMoved === "function")
-                    onMoved(nextLatLng.lat(), nextLatLng.lng(), link.heading);
-                }, 800);
-              }, 400);
-            } else {
-              alert('Нет следующей панорамы по этому направлению!');
+          this.panorama.setPov({ heading: link.heading, pitch: 0 });
+          setTimeout(() => {
+            const handler = () => {
+              const pos = this.getPosition();
+              google.maps.event.removeListener(listener);
               if (typeof onMoved === "function")
-                onMoved(null, null, null, true);
-            }
-          });
+                onMoved(pos.lat, pos.lng, pos.heading);
+            };
+            const listener = this.panorama.addListener("position_changed", handler);
+            this.panorama.setPano(link.pano);
+          }, 400);
         }
       }
 
@@ -266,14 +257,7 @@
             this.setVotingEnabled(false);
             this.voteMgr.displayEl.textContent = `Движение... (${maxDir})`;
 
-            // Новый способ движения с сохранением координаты СЛЕДУЮЩЕЙ точки
-            this.mapMgr.rotateAndMoveAndSave(maxDir, this.voteMgr.city, async (lat, lng, heading, error) => {
-              if (error || lat === null || lng === null) {
-                this.voteMgr.displayEl.textContent = 'Нет поворота';
-                this.isMoving = false;
-                this.setVotingEnabled(true);
-                return;
-              }
+            this.mapMgr.rotateAndMoveAndSave(maxDir, this.voteMgr.city, async (lat, lng, heading) => {
               await this.mapMgr.savePositionToServer(this.voteMgr.city, lat, lng, heading);
               await this.voteMgr.resetOnServer();
               this.voteMgr.resetLocal();
@@ -326,3 +310,4 @@
   </script>
 </body>
 </html>
+
