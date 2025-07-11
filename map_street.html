@@ -9,15 +9,14 @@
     #map { height:30vh; width:100%; }
     #street-view { height:70vh; width:100%; position:relative; }
     .street-overlay { position:absolute; top:0; left:0; width:100%; height:100%; z-index:1001; background:rgba(255,255,255,0); display:none; }
-    .mode-label, #citySelect, #voteResults, #coordsDisplay, #driveButton, #timerLabel, #startButton, #backButton, #nextCoordsDisplay { position:absolute; z-index:1002; }
+    .mode-label, #citySelect, #voteResults, #coordsDisplay, #driveButton, #backButton, #nextCoordsDisplay, #timerDisplay { position:absolute; z-index:1002; }
     .mode-label { top:10px; left:10px; background:red; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; }
     #citySelect { top:10px; right:10px; padding:5px; }
     #voteResults { top:50px; left:10px; background:rgba(0,0,0,0.7); padding:5px 10px; border-radius:4px; }
     #coordsDisplay { top:80px; left:10px; background:#34495e; padding:5px 10px; border-radius:4px; font-size:14px; }
     #nextCoordsDisplay { top:110px; left:10px; background:#2c7; color:#000; padding:5px 10px; border-radius:4px; font-size:14px; }
-    #timerLabel { bottom:145px; right:10px; font-size:18px; background:#222; color:#fff; border-radius:4px; padding:7px 12px; }
+    #timerDisplay { top:140px; left:10px; background:#2c7; color:#000; padding:5px 10px; border-radius:4px; font-size:16px; font-weight:bold; }
     #driveButton { bottom:100px; right:10px; background:green; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
-    #startButton { bottom:160px; right:130px; background:#2980b9; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
     #backButton { bottom:20px; right:10px; background:orange; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
     .vote-buttons { position:absolute; bottom:20px; left:10px; z-index:1002; }
     .vote-buttons button { margin-right:5px; padding:8px 12px; }
@@ -36,9 +35,8 @@
   <div id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</div>
   <div id="coordsDisplay">Координаты: —</div>
   <div id="nextCoordsDisplay">Куда поедем: —</div>
-  <span id="timerLabel" style="display:none"></span>
+  <div id="timerDisplay"></div>
   <button id="driveButton">ЕХАТЬ</button>
-  <button id="startButton">Старт</button>
   <button id="backButton">← Вернуться на карту</button>
   <div id="map"></div>
   <div id="street-view"><div id="streetOverlay" class="street-overlay"></div></div>
@@ -58,10 +56,6 @@
     };
 
     function initApp() {
-      let timer = null;
-      let timerValue = 5; // seconds
-      let timerActive = false;
-
       class MapManager {
         constructor(mapEl, streetEl, cities) {
           this.cities = cities;
@@ -157,7 +151,7 @@
                 });
               }
             });
-          } catch (e) {}
+          } catch (e) { }
         }
 
         async loadNextPositionFromServer(city) {
@@ -193,21 +187,6 @@
             })
           });
           return true;
-        }
-
-        async resetToStart(city) {
-          const pos = this.cities[city];
-          this.panorama.setPosition(pos);
-          this.panorama.setPov({ heading: 0, pitch: 0 });
-          updateCoordsDisplay(pos.lat, pos.lng, 0);
-          await fetch(`${BASE_URL}/rest/v1/current_position?city=eq.${city}`, {
-            method: "PATCH",
-            headers: {
-              apikey: API_KEY,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ lat: pos.lat, lng: pos.lng, heading: 0 })
-          });
         }
       }
 
@@ -277,13 +256,16 @@
           this.mode = "voting";
           this.mapMgr = new MapManager(document.getElementById('map'), document.getElementById('street-view'), this.cities);
           const city = localStorage.getItem("selectedCity") || "Berlin";
+          this.lastVotesString = ""; // <--- для сравнения
           this.voteMgr = new VoteManager(city, this.mode, document.getElementById('voteResults'), (votes) => this.handleVoteChange(votes));
           this.mapMgr.loadPositionFromServer(city);
           this.voteMgr.load();
           this.updateNextCoordsDisplay(city);
-          this.timerValue = 0;
-          this.timerActive = false;
+
+          this.driveTimer = null;
+          this.driveTimerValue = 0;
           this.timerInterval = null;
+
           this.setupUI();
         }
 
@@ -295,57 +277,38 @@
             await this.mapMgr.loadPositionFromServer(e.target.value);
             await this.voteMgr.load();
             await this.updateNextCoordsDisplay(e.target.value);
-            this.resetTimer();
+            this.stopDriveCountdown(); // при смене города сбрасываем таймер
+            this.lastVotesString = ""; // сброс сравнения голосов при смене города
           });
           document.querySelectorAll('.vote-buttons button').forEach(btn =>
             btn.addEventListener('click', () => this.voteMgr.vote(btn.dataset.dir))
           );
-          document.getElementById('driveButton').addEventListener('click', () => this.drive());
-          document.getElementById('startButton').addEventListener('click', async () => {
-            await this.mapMgr.resetToStart(this.voteMgr.city);
-            this.voteMgr.resetLocal();
-            this.updateNextCoordsDisplay(this.voteMgr.city);
-            this.resetTimer();
-          });
+          document.getElementById('driveButton').addEventListener('click', () => this.drive(true)); // true = ручной запуск
         }
 
         async handleVoteChange(votes) {
+          // --- сравнение с прошлым состоянием голосов ---
+          const votesString = JSON.stringify(votes);
+          if (votesString === this.lastVotesString) {
+            // Таймер не сбрасываем!
+            return;
+          }
+          this.lastVotesString = votesString;
+
           const total = Object.values(votes).reduce((a, b) => a + b, 0);
           if (total === 0) {
-            this.resetTimer();
+            this.stopDriveCountdown();
             return;
           }
           const maxDir = Object.keys(votes).reduce((a, b) => votes[a] > votes[b] ? a : b);
           await this.mapMgr.saveNextPositionToServer(this.voteMgr.city, maxDir);
           await this.updateNextCoordsDisplay(this.voteMgr.city);
 
-          // Если таймер не был активен — стартуем!
-          if (!this.timerActive) {
-            this.startTimer();
-          }
+          // === Автоматический запуск "ЕХАТЬ" ===
+          this.startDriveCountdown();
         }
 
-        startTimer() {
-          this.timerValue = 5;
-          this.timerActive = true;
-          document.getElementById('timerLabel').style.display = "";
-          document.getElementById('timerLabel').textContent = `Поедем через: ${this.timerValue} сек`;
-          this.timerInterval = setInterval(() => {
-            this.timerValue--;
-            document.getElementById('timerLabel').textContent = `Поедем через: ${this.timerValue} сек`;
-            if (this.timerValue <= 0) {
-              this.drive();
-            }
-          }, 1000);
-        }
-
-        resetTimer() {
-          if (this.timerInterval) clearInterval(this.timerInterval);
-          this.timerActive = false;
-          this.timerValue = 0;
-          document.getElementById('timerLabel').style.display = "none";
-        }
-
+        // Показываем будущее положение
         async updateNextCoordsDisplay(city) {
           const next = await this.mapMgr.loadNextPositionFromServer(city);
           if (next) {
@@ -356,14 +319,35 @@
           }
         }
 
-        async drive() {
-          this.resetTimer();
+        // Таймер отсчёта до авто-движения
+        startDriveCountdown() {
+          this.stopDriveCountdown(); // сбрасываем если уже был
+          this.driveTimerValue = 5;
+          document.getElementById('timerDisplay').textContent = `Поедем через: ${this.driveTimerValue}`;
+          this.timerInterval = setInterval(() => {
+            this.driveTimerValue--;
+            if (this.driveTimerValue > 0) {
+              document.getElementById('timerDisplay').textContent = `Поедем через: ${this.driveTimerValue}`;
+            } else {
+              this.stopDriveCountdown();
+              this.drive(false); // false = автоматический запуск
+            }
+          }, 1000);
+        }
+
+        stopDriveCountdown() {
+          if (this.timerInterval) clearInterval(this.timerInterval);
+          document.getElementById('timerDisplay').textContent = '';
+        }
+
+        async drive(isManual) {
+          this.stopDriveCountdown();
           const moved = await this.mapMgr.goToNextPosition(this.voteMgr.city);
           if (!moved) {
             this.voteMgr.displayEl.textContent = 'Нет будущей координаты для движения';
             return;
           }
-          this.voteMgr.displayEl.textContent = `Поехали!`;
+          this.voteMgr.displayEl.textContent = isManual ? `Поехали! (ручной запуск)` : `Поехали! (авто)`;
           await this.voteMgr.resetOnServer();
           this.voteMgr.resetLocal();
           await this.updateNextCoordsDisplay(this.voteMgr.city);
@@ -399,10 +383,7 @@
           }
         }
       }, 2000);
-
     }
   </script>
 </body>
 </html>
-
-
