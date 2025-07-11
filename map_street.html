@@ -15,9 +15,11 @@
     #voteResults { top:50px; left:10px; background:rgba(0,0,0,0.7); padding:5px 10px; border-radius:4px; }
     #coordsDisplay { top:80px; left:10px; background:#34495e; padding:5px 10px; border-radius:4px; font-size:14px; }
     #driveButton { bottom:100px; right:10px; background:green; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
+    #driveButton[disabled] { background: #556b2f; cursor:not-allowed; opacity:0.7; }
     #backButton { bottom:20px; right:10px; background:orange; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
     .vote-buttons { position:absolute; bottom:20px; left:10px; z-index:1002; }
     .vote-buttons button { margin-right:5px; padding:8px 12px; }
+    .vote-buttons[disabled] button { background:#555; color:#bbb; cursor:not-allowed; }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8" async defer></script>
@@ -36,7 +38,7 @@
   <button id="backButton">← Вернуться на карту</button>
   <div id="map"></div>
   <div id="street-view"><div id="streetOverlay" class="street-overlay"></div></div>
-  <div class="vote-buttons">
+  <div class="vote-buttons" id="voteButtons">
     <button data-dir="left">← Влево</button>
     <button data-dir="straight">↑ Прямо</button>
     <button data-dir="right">→ Вправо</button>
@@ -200,16 +202,18 @@
           this.voteMgr = new VoteManager(city, this.mode, document.getElementById('voteResults'));
           this.mapMgr.loadPositionFromServer(city);
           this.voteMgr.load();
+          this.isMoving = false;
+          this.currentCoords = null;
           this.setupUI();
 
-          // === ДОБАВЛЕНО для корректной синхронизации движения ===
-          this.pendingSave = false;
           this.mapMgr.panorama.addListener('pano_changed', async () => {
-            if (this.pendingSave) {
-              this.pendingSave = false;
+            if (this.isMoving) {
+              // После смены pano, СРАВНИВАЕМ новую координату с базой!
               await this.mapMgr.savePositionToServer(this.voteMgr.city);
               await this.voteMgr.resetOnServer();
               this.voteMgr.resetLocal();
+              this.isMoving = false;
+              this.setVotingEnabled(true);
             }
           });
         }
@@ -223,12 +227,26 @@
             await this.voteMgr.load();
           });
           document.querySelectorAll('.vote-buttons button').forEach(btn =>
-            btn.addEventListener('click', () => this.voteMgr.vote(btn.dataset.dir))
+            btn.addEventListener('click', () => this.voteVote(btn.dataset.dir))
           );
           document.getElementById('driveButton').addEventListener('click', () => this.drive());
         }
 
+        setVotingEnabled(enabled) {
+          document.getElementById('driveButton').disabled = !enabled;
+          document.querySelectorAll('.vote-buttons button').forEach(btn => {
+            btn.disabled = !enabled;
+            btn.style.opacity = enabled ? "1" : "0.7";
+          });
+        }
+
+        async voteVote(dir) {
+          if (this.isMoving) return;
+          await this.voteMgr.vote(dir);
+        }
+
         async drive() {
+          if (this.isMoving) return;
           const total = Object.values(this.voteMgr.votes).reduce((a, b) => a + b, 0);
           if (total === 0) {
             this.voteMgr.displayEl.textContent = 'Нет голосов для движения';
@@ -236,13 +254,39 @@
           }
           const maxDir = Object.keys(this.voteMgr.votes).reduce((a, b) => this.voteMgr.votes[a] > this.voteMgr.votes[b] ? a : b);
           try {
-            this.pendingSave = true;
+            this.isMoving = true;
+            this.setVotingEnabled(false); // блокируем всё
+            this.voteMgr.displayEl.textContent = `Движение... (${maxDir})`;
             this.mapMgr.rotateAndMove(maxDir);
-            this.voteMgr.displayEl.textContent = `Вы поехали как большинство (${maxDir})`;
-            // ВСЁ остальное делается по событию pano_changed!
           } catch (e) {
             this.voteMgr.displayEl.textContent = 'Нет поворота';
-            this.pendingSave = false;
+            this.isMoving = false;
+            this.setVotingEnabled(true);
+          }
+        }
+
+        async syncCoordsFromServer() {
+          const city = this.voteMgr.city;
+          const url = `${BASE_URL}/rest/v1/current_position?city=eq.${city}&select=lat,lng,heading&limit=1`;
+          const response = await fetch(url, { headers: { apikey: API_KEY } });
+          const data = await response.json();
+          if (data.length) {
+            const { lat, lng, heading } = data[0];
+            const current = this.mapMgr.getPosition();
+            // запоминаем последние координаты из базы (для проверки в движении)
+            this.currentCoords = { lat, lng, heading };
+            // Если мы не двигаемся или только что закончили движение — обновляем панораму
+            if (!this.isMoving &&
+              (Math.abs(current.lat - lat) > 1e-6 ||
+              Math.abs(current.lng - lng) > 1e-6 ||
+              Math.abs(current.heading - heading) > 1e-2)
+            ) {
+              this.mapMgr.panorama.setPosition({ lat, lng });
+              this.mapMgr.panorama.setPov({ heading, pitch: 0 });
+              updateCoordsDisplay(lat, lng, heading);
+            }
+            // Даже если двигаемся — всегда обновляем дисплей координат
+            updateCoordsDisplay(lat, lng, heading);
           }
         }
       }
@@ -256,27 +300,11 @@
 
       setInterval(() => app.voteMgr.load(), 2000);
 
-      // === АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ КООРДИНАТ ===
       setInterval(async () => {
-        const city = app.voteMgr.city;
-        const url = `${BASE_URL}/rest/v1/current_position?city=eq.${city}&select=lat,lng,heading&limit=1`;
-        const response = await fetch(url, { headers: { apikey: API_KEY } });
-        const data = await response.json();
-        if (data.length) {
-          const { lat, lng, heading } = data[0];
-          const current = app.mapMgr.getPosition();
-          if (
-            Math.abs(current.lat - lat) > 1e-6 ||
-            Math.abs(current.lng - lng) > 1e-6 ||
-            Math.abs(current.heading - heading) > 1e-2
-          ) {
-            app.mapMgr.panorama.setPosition({ lat, lng });
-            app.mapMgr.panorama.setPov({ heading, pitch: 0 });
-            updateCoordsDisplay(lat, lng, heading);
-          }
-        }
-      }, 2000); // обновлять каждые 2 секунды
+        await app.syncCoordsFromServer();
+      }, 2000);
     }
   </script>
 </body>
 </html>
+
