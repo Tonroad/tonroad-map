@@ -9,11 +9,12 @@
     #map { height:30vh; width:100%; }
     #street-view { height:70vh; width:100%; position:relative; }
     .street-overlay { position:absolute; top:0; left:0; width:100%; height:100%; z-index:1001; background:rgba(255,255,255,0); display:none; }
-    .mode-label, #citySelect, #voteResults, #coordsDisplay, #driveButton, #backButton { position:absolute; z-index:1002; }
+    .mode-label, #citySelect, #voteResults, #coordsDisplay, #driveButton, #backButton, #nextCoordsDisplay { position:absolute; z-index:1002; }
     .mode-label { top:10px; left:10px; background:red; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; }
     #citySelect { top:10px; right:10px; padding:5px; }
     #voteResults { top:50px; left:10px; background:rgba(0,0,0,0.7); padding:5px 10px; border-radius:4px; }
     #coordsDisplay { top:80px; left:10px; background:#34495e; padding:5px 10px; border-radius:4px; font-size:14px; }
+    #nextCoordsDisplay { top:110px; left:10px; background:#2c7; color:#000; padding:5px 10px; border-radius:4px; font-size:14px; }
     #driveButton { bottom:100px; right:10px; background:green; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
     #backButton { bottom:20px; right:10px; background:orange; color:#fff; padding:10px 15px; border-radius:4px; cursor:pointer; }
     .vote-buttons { position:absolute; bottom:20px; left:10px; z-index:1002; }
@@ -32,6 +33,7 @@
   </select>
   <div id="voteResults">Влево: 0 | Прямо: 0 | Вправо: 0</div>
   <div id="coordsDisplay">Координаты: —</div>
+  <div id="nextCoordsDisplay">Куда поедем: —</div>
   <button id="driveButton">ЕХАТЬ</button>
   <button id="backButton">← Вернуться на карту</button>
   <div id="map"></div>
@@ -101,14 +103,13 @@
         async savePositionToServer(city) {
           const pos = this.getPosition();
           updateCoordsDisplay(pos.lat, pos.lng, pos.heading);
-          await fetch(`${BASE_URL}/rest/v1/current_position`, {
-            method: "POST",
+          await fetch(`${BASE_URL}/rest/v1/current_position?city=eq.${city}`, {
+            method: "PATCH",
             headers: {
               apikey: API_KEY,
-              "Content-Type": "application/json",
-              Prefer: "resolution=merge-duplicates"
+              "Content-Type": "application/json"
             },
-            body: JSON.stringify({ city, ...pos })
+            body: JSON.stringify({ lat: pos.lat, lng: pos.lng, heading: pos.heading })
           });
         }
 
@@ -127,19 +128,78 @@
           return best.link;
         }
 
-        rotateAndMove(dir) {
-          const link = this.findBestLink(dir);
-          this.panorama.setPov({ heading: link.heading, pitch: 0 });
-          setTimeout(() => this.panorama.setPano(link.pano), 500);
+        // Новая функция: вычислить и сохранить будущие координаты в next_lat/next_lng/next_heading
+        async saveNextPositionToServer(city, dir) {
+          try {
+            const link = this.findBestLink(dir);
+            const svService = new google.maps.StreetViewService();
+            svService.getPanorama({ pano: link.pano }, async (data, status) => {
+              if (status === google.maps.StreetViewStatus.OK) {
+                const nextLatLng = data.location.latLng;
+                await fetch(`${BASE_URL}/rest/v1/current_position?city=eq.${city}`, {
+                  method: "PATCH",
+                  headers: {
+                    apikey: API_KEY,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    next_lat: nextLatLng.lat(),
+                    next_lng: nextLatLng.lng(),
+                    next_heading: link.heading
+                  })
+                });
+              }
+            });
+          } catch (e) {
+            // Если нет подходящего поворота — future координаты не обновляем
+          }
+        }
+
+        // Загружаем будущие координаты
+        async loadNextPositionFromServer(city) {
+          const url = `${BASE_URL}/rest/v1/current_position?city=eq.${city}&select=next_lat,next_lng,next_heading&limit=1`;
+          const response = await fetch(url, { headers: { apikey: API_KEY } });
+          const data = await response.json();
+          if (data.length && data[0].next_lat && data[0].next_lng && data[0].next_heading !== undefined) {
+            return {
+              lat: data[0].next_lat,
+              lng: data[0].next_lng,
+              heading: data[0].next_heading
+            };
+          }
+          return null;
+        }
+
+        // Перемещаемся по future-координатам (при нажатии "ЕХАТЬ")
+        async goToNextPosition(city) {
+          const next = await this.loadNextPositionFromServer(city);
+          if (!next) return false;
+          this.panorama.setPosition({ lat: next.lat, lng: next.lng });
+          this.panorama.setPov({ heading: next.heading, pitch: 0 });
+          updateCoordsDisplay(next.lat, next.lng, next.heading);
+          await fetch(`${BASE_URL}/rest/v1/current_position?city=eq.${city}`, {
+            method: "PATCH",
+            headers: {
+              apikey: API_KEY,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              lat: next.lat,
+              lng: next.lng,
+              heading: next.heading
+            })
+          });
+          return true;
         }
       }
 
       class VoteManager {
-        constructor(city, mode, displayEl) {
+        constructor(city, mode, displayEl, onVoteChange) {
           this.city = city;
           this.mode = mode;
           this.displayEl = displayEl;
           this.votes = { left: 0, straight: 0, right: 0 };
+          this.onVoteChange = onVoteChange;
         }
 
         async load() {
@@ -149,11 +209,13 @@
           this.votes = { left: 0, straight: 0, right: 0 };
           data.forEach(v => this.votes[v.direction] = v.count);
           this.updateDisplay();
+          if (this.onVoteChange) this.onVoteChange(this.votes);
         }
 
         async vote(dir) {
           this.votes[dir]++;
           this.updateDisplay();
+          if (this.onVoteChange) this.onVoteChange(this.votes);
           await fetch(`${BASE_URL}/functions/v1/cast_vote-ts`, {
             method: "POST",
             headers: {
@@ -197,9 +259,11 @@
           this.mode = "voting";
           this.mapMgr = new MapManager(document.getElementById('map'), document.getElementById('street-view'), this.cities);
           const city = localStorage.getItem("selectedCity") || "Berlin";
-          this.voteMgr = new VoteManager(city, this.mode, document.getElementById('voteResults'));
+          // передаем функцию, которая будет обновлять future координаты после голосования
+          this.voteMgr = new VoteManager(city, this.mode, document.getElementById('voteResults'), (votes) => this.handleVoteChange(votes));
           this.mapMgr.loadPositionFromServer(city);
           this.voteMgr.load();
+          this.updateNextCoordsDisplay(city);
           this.setupUI();
         }
 
@@ -210,6 +274,7 @@
             localStorage.setItem("selectedCity", e.target.value);
             await this.mapMgr.loadPositionFromServer(e.target.value);
             await this.voteMgr.load();
+            await this.updateNextCoordsDisplay(e.target.value);
           });
           document.querySelectorAll('.vote-buttons button').forEach(btn =>
             btn.addEventListener('click', () => this.voteMgr.vote(btn.dataset.dir))
@@ -217,22 +282,40 @@
           document.getElementById('driveButton').addEventListener('click', () => this.drive());
         }
 
+        // Определяем куда ехать и обновляем next_lat/next_lng/next_heading
+        async handleVoteChange(votes) {
+          // Если голосов больше 0 — обновляем future координаты
+          const total = Object.values(votes).reduce((a, b) => a + b, 0);
+          if (total === 0) return;
+          const maxDir = Object.keys(votes).reduce((a, b) => votes[a] > votes[b] ? a : b);
+          await this.mapMgr.saveNextPositionToServer(this.voteMgr.city, maxDir);
+          // Показываем куда поедем
+          await this.updateNextCoordsDisplay(this.voteMgr.city);
+        }
+
+        // Отобразить куда поедем (next_lat/next_lng/next_heading)
+        async updateNextCoordsDisplay(city) {
+          const next = await this.mapMgr.loadNextPositionFromServer(city);
+          if (next) {
+            document.getElementById('nextCoordsDisplay').textContent =
+              `Куда поедем: ${next.lat.toFixed(5)}, ${next.lng.toFixed(5)}, heading: ${next.heading.toFixed(1)}`;
+          } else {
+            document.getElementById('nextCoordsDisplay').textContent = 'Куда поедем: —';
+          }
+        }
+
         async drive() {
-          const total = Object.values(this.voteMgr.votes).reduce((a, b) => a + b, 0);
-          if (total === 0) {
-            this.voteMgr.displayEl.textContent = 'Нет голосов для движения';
+          // Двигаем только если есть future координаты
+          const moved = await this.mapMgr.goToNextPosition(this.voteMgr.city);
+          if (!moved) {
+            this.voteMgr.displayEl.textContent = 'Нет будущей координаты для движения';
             return;
           }
-          const maxDir = Object.keys(this.voteMgr.votes).reduce((a, b) => this.voteMgr.votes[a] > this.voteMgr.votes[b] ? a : b);
-          try {
-            this.mapMgr.rotateAndMove(maxDir);
-            this.voteMgr.displayEl.textContent = `Вы поехали как большинство (${maxDir})`;
-            await this.mapMgr.savePositionToServer(this.voteMgr.city);
-            await this.voteMgr.resetOnServer();
-            this.voteMgr.resetLocal();
-          } catch (e) {
-            this.voteMgr.displayEl.textContent = 'Нет поворота';
-          }
+          this.voteMgr.displayEl.textContent = `Поехали!`;
+          await this.voteMgr.resetOnServer();
+          this.voteMgr.resetLocal();
+          // После движения обновить future
+          await this.updateNextCoordsDisplay(this.voteMgr.city);
         }
       }
 
@@ -242,31 +325,33 @@
       }
 
       const app = new AppController();
+
+      // Обновлять голоса каждые 2 секунды
       setInterval(() => app.voteMgr.load(), 2000);
-// === ДОБАВЛЯЕМ АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ КООРДИНАТ ===
 
-setInterval(async () => {
-  const city = app.voteMgr.city;
-  // Загружаем актуальные координаты из Supabase
-  const url = `${BASE_URL}/rest/v1/current_position?city=eq.${city}&select=lat,lng,heading&limit=1`;
-  const response = await fetch(url, { headers: { apikey: API_KEY } });
-  const data = await response.json();
-  if (data.length) {
-    const { lat, lng, heading } = data[0];
-    const current = app.mapMgr.getPosition();
-    // Обновляем только если координаты изменились (во избежание лишней перерисовки)
-    if (
-      Math.abs(current.lat - lat) > 1e-6 ||
-      Math.abs(current.lng - lng) > 1e-6 ||
-      Math.abs(current.heading - heading) > 1e-2
-    ) {
-      app.mapMgr.panorama.setPosition({ lat, lng });
-      app.mapMgr.panorama.setPov({ heading, pitch: 0 });
-      updateCoordsDisplay(lat, lng, heading);
-    }
-  }
-}, 2000); // обновлять каждые 5 секунд
+      // Обновлять будущие координаты каждые 2 секунды
+      setInterval(() => app.updateNextCoordsDisplay(app.voteMgr.city), 2000);
 
+      // Обновлять координаты текущей позиции каждые 2 секунды (если что-то поменялось)
+      setInterval(async () => {
+        const city = app.voteMgr.city;
+        const url = `${BASE_URL}/rest/v1/current_position?city=eq.${city}&select=lat,lng,heading&limit=1`;
+        const response = await fetch(url, { headers: { apikey: API_KEY } });
+        const data = await response.json();
+        if (data.length) {
+          const { lat, lng, heading } = data[0];
+          const current = app.mapMgr.getPosition();
+          if (
+            Math.abs(current.lat - lat) > 1e-6 ||
+            Math.abs(current.lng - lng) > 1e-6 ||
+            Math.abs(current.heading - heading) > 1e-2
+          ) {
+            app.mapMgr.panorama.setPosition({ lat, lng });
+            app.mapMgr.panorama.setPov({ heading, pitch: 0 });
+            updateCoordsDisplay(lat, lng, heading);
+          }
+        }
+      }, 2000);
 
     }
   </script>
