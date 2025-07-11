@@ -201,6 +201,17 @@
           this.mapMgr.loadPositionFromServer(city);
           this.voteMgr.load();
           this.setupUI();
+
+          // === ДОБАВЛЕНО для корректной синхронизации движения ===
+          this.pendingSave = false;
+          this.mapMgr.panorama.addListener('pano_changed', async () => {
+            if (this.pendingSave) {
+              this.pendingSave = false;
+              await this.mapMgr.savePositionToServer(this.voteMgr.city);
+              await this.voteMgr.resetOnServer();
+              this.voteMgr.resetLocal();
+            }
+          });
         }
 
         setupUI() {
@@ -225,13 +236,13 @@
           }
           const maxDir = Object.keys(this.voteMgr.votes).reduce((a, b) => this.voteMgr.votes[a] > this.voteMgr.votes[b] ? a : b);
           try {
+            this.pendingSave = true;
             this.mapMgr.rotateAndMove(maxDir);
             this.voteMgr.displayEl.textContent = `Вы поехали как большинство (${maxDir})`;
-            await this.mapMgr.savePositionToServer(this.voteMgr.city);
-            await this.voteMgr.resetOnServer();
-            this.voteMgr.resetLocal();
+            // ВСЁ остальное делается по событию pano_changed!
           } catch (e) {
             this.voteMgr.displayEl.textContent = 'Нет поворота';
+            this.pendingSave = false;
           }
         }
       }
@@ -242,32 +253,29 @@
       }
 
       const app = new AppController();
+
       setInterval(() => app.voteMgr.load(), 2000);
-// === ДОБАВЛЯЕМ АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ КООРДИНАТ ===
 
-setInterval(async () => {
-  const city = app.voteMgr.city;
-  // Загружаем актуальные координаты из Supabase
-  const url = `${BASE_URL}/rest/v1/current_position?city=eq.${city}&select=lat,lng,heading&limit=1`;
-  const response = await fetch(url, { headers: { apikey: API_KEY } });
-  const data = await response.json();
-  if (data.length) {
-    const { lat, lng, heading } = data[0];
-    const current = app.mapMgr.getPosition();
-    // Обновляем только если координаты изменились (во избежание лишней перерисовки)
-    if (
-      Math.abs(current.lat - lat) > 1e-6 ||
-      Math.abs(current.lng - lng) > 1e-6 ||
-      Math.abs(current.heading - heading) > 1e-2
-    ) {
-      app.mapMgr.panorama.setPosition({ lat, lng });
-      app.mapMgr.panorama.setPov({ heading, pitch: 0 });
-      updateCoordsDisplay(lat, lng, heading);
-    }
-  }
-}, 2000); // обновлять каждые 5 секунд
-
-
+      // === АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ КООРДИНАТ ===
+      setInterval(async () => {
+        const city = app.voteMgr.city;
+        const url = `${BASE_URL}/rest/v1/current_position?city=eq.${city}&select=lat,lng,heading&limit=1`;
+        const response = await fetch(url, { headers: { apikey: API_KEY } });
+        const data = await response.json();
+        if (data.length) {
+          const { lat, lng, heading } = data[0];
+          const current = app.mapMgr.getPosition();
+          if (
+            Math.abs(current.lat - lat) > 1e-6 ||
+            Math.abs(current.lng - lng) > 1e-6 ||
+            Math.abs(current.heading - heading) > 1e-2
+          ) {
+            app.mapMgr.panorama.setPosition({ lat, lng });
+            app.mapMgr.panorama.setPov({ heading, pitch: 0 });
+            updateCoordsDisplay(lat, lng, heading);
+          }
+        }
+      }, 2000); // обновлять каждые 2 секунды
     }
   </script>
 </body>
