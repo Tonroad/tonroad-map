@@ -200,6 +200,7 @@
     let votes = { left: 0, straight: 0, right: 0 };
     let timerValue = 0, timerActive = false, timerInterval = null;
     let routeHistory = {};
+    let votesWereZero = true;
     window.onload = () => {
       Telegram.WebApp.ready();
       initApp();
@@ -269,17 +270,28 @@
       mapRoutePath.setPath([CITIES[city]]);
       updateVotes();
       resetTimer();
+      votesWereZero = true;
     }
     async function updateVotes() {
       const url = `${BASE_URL}/rest/v1/votes_summary?select=direction,count&city=eq.${selectedCity}&mode=eq.voting`;
       const res = await fetch(url, { headers: { apikey: API_KEY } });
       const data = await res.json();
+      let total = 0;
       votes = { left: 0, straight: 0, right: 0 };
-      data.forEach(v => votes[v.direction] = v.count);
+      data.forEach(v => {
+        votes[v.direction] = v.count;
+        total += v.count;
+      });
       document.getElementById("voteResults").textContent =
         `Влево: ${votes.left} | ↑: ${votes.straight} | Вправо: ${votes.right}`;
-      const total = votes.left + votes.straight + votes.right;
-      if (total > 0 && !timerActive) startTimer();
+      if (total > 0 && votesWereZero && !timerActive) {
+        startTimer();
+        votesWereZero = false;
+      }
+      if (total === 0) {
+        votesWereZero = true;
+        resetTimer();
+      }
     }
     async function castVote(dir) {
       await fetch(`${BASE_URL}/functions/v1/cast_vote-ts`, {
