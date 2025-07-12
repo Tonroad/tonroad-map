@@ -73,6 +73,27 @@
       position: relative;
       touch-action: none !important;
     }
+    #toggle-rotation {
+      position: absolute;
+      top: 15px;
+      right: 65px; /* чтобы не налезала на компас Google! */
+      z-index: 5;
+      background: #fff;
+      color: #212e3e;
+      border-radius: 9px;
+      border: none;
+      padding: 7px 18px;
+      font-size: 15px;
+      font-weight: bold;
+      opacity: 0.90;
+      box-shadow: 0 1px 8px rgba(34,43,56,.18);
+      cursor: pointer;
+      transition: background .15s;
+    }
+    #toggle-rotation.active {
+      background: #3498db;
+      color: #fff;
+    }
     #block-touch {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
@@ -155,6 +176,7 @@
       .btn-vote, .btn-main { font-size: 14px; padding: 9px 1.7vw; min-width: 28px; min-height: 18px;}
       #voteResults { font-size: 11px;}
       #timerLabel { font-size: 12px;}
+      #toggle-rotation { font-size: 13px; padding: 6px 8px; top: 10px; right: 53px; }
     }
     @media (max-width:400px) {
       #headerBar, #topPanel { font-size: 12px;}
@@ -183,6 +205,7 @@
     </div>
     <div id="main-content">
       <div id="street-view" style="position: relative;">
+        <button id="toggle-rotation" class="">Вращение: выкл</button>
         <div id="block-touch"></div>
       </div>
       <div id="controls">
@@ -223,11 +246,18 @@
     let hasVoted = false;
     let fixedHeading = 0;
     let fixedPitch = 0;
+    let allowRotation = false; // по умолчанию вращение заблокировано
 
     window.onload = () => {
       Telegram.WebApp.ready();
       initApp();
     };
+
+    function updateToggleButtonUI() {
+      const btn = document.getElementById('toggle-rotation');
+      btn.textContent = 'Вращение: ' + (allowRotation ? 'вкл' : 'выкл');
+      btn.classList.toggle('active', allowRotation);
+    }
 
     async function getLastPosition(city) {
       const resp = await fetch(`${BASE_URL}/rest/v1/current_position?city=eq.${city}&select=lat,lng,heading&limit=1`, {
@@ -256,13 +286,17 @@
     }
 
     function lockCamera() {
-      // Фиксировать POV всегда вперёд
-      panorama.addListener('pov_changed', function () {
-        let pov = panorama.getPov();
-        if (Math.abs(pov.heading - fixedHeading) > 1 || Math.abs(pov.pitch - fixedPitch) > 1) {
-          panorama.setPov({ heading: fixedHeading, pitch: fixedPitch });
-        }
-      });
+      if (!allowRotation) {
+        google.maps.event.clearListeners(panorama, 'pov_changed');
+        panorama.addListener('pov_changed', function () {
+          let pov = panorama.getPov();
+          if (Math.abs(pov.heading - fixedHeading) > 1 || Math.abs(pov.pitch - fixedPitch) > 1) {
+            panorama.setPov({ heading: fixedHeading, pitch: fixedPitch });
+          }
+        });
+      } else {
+        google.maps.event.clearListeners(panorama, 'pov_changed');
+      }
     }
 
     function setStreetViewTo(lat, lng, heading = 0) {
@@ -310,6 +344,20 @@
       svDiv.addEventListener('click', e => e.preventDefault(), true);
       svDiv.addEventListener('dblclick', e => e.preventDefault(), true);
 
+      // Кнопка "Вращение: выкл/вкл"
+      document.getElementById('toggle-rotation').onclick = function() {
+        allowRotation = !allowRotation;
+        updateToggleButtonUI();
+        if (allowRotation) {
+          // Разрешить менять POV руками — убираем блокировку
+          google.maps.event.clearListeners(panorama, 'pov_changed');
+        } else {
+          lockCamera();
+          panorama.setPov({ heading: fixedHeading, pitch: fixedPitch });
+        }
+      };
+      updateToggleButtonUI();
+
       let lastPos = await getLastPosition(selectedCity);
       let startPos = lastPos ? { lat: lastPos.lat, lng: lastPos.lng } : CITIES[selectedCity];
       let startHeading = lastPos ? lastPos.heading : 0;
@@ -346,7 +394,6 @@
       setInterval(drawRouteOnMap, 3000);
       updateVotes();
       drawRouteOnMap();
-      // Проверяем, голосовал ли пользователь:
       hasVoted = !!localStorage.getItem(`voted_${selectedCity}`);
       updateVoteButtons();
     }
@@ -462,7 +509,6 @@
         },
         body: JSON.stringify({ count: 0 })
       });
-      // Сброс голосования:
       hasVoted = false;
       localStorage.removeItem(`voted_${selectedCity}`);
       updateVoteButtons();
