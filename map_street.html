@@ -71,6 +71,7 @@
       box-shadow: 0 1px 8px rgba(0,0,0,.07) inset;
       z-index: 1;
       position: relative;
+      touch-action: none !important;
     }
     #block-touch {
       position: absolute;
@@ -106,6 +107,10 @@
     .btn-vote.left    { background: #4d73e8; }
     .btn-vote.straight{ background: #2ecc71; }
     .btn-vote.right   { background: #ffc43c; color: #222;}
+    .btn-vote.disabled {
+      opacity: 0.6;
+      pointer-events: none;
+    }
     #mainBtns {
       display: flex; flex-direction: row; justify-content: center; gap: 3vw; width: 100vw;
       margin-top: 0; margin-bottom: 6px;
@@ -155,6 +160,8 @@
       #headerBar, #topPanel { font-size: 12px;}
       .btn-main, .btn-vote { font-size: 13px; min-height: 18px;}
     }
+    /* Отключить клики по стрелкам Google Street View */
+    .gm-iv-svlinks { pointer-events: none !important; }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLtao0F3Xm136OwD-LFglwhpBdOB6sht8" async defer></script>
@@ -213,6 +220,10 @@
     let timerValue = 0, timerActive = false, timerInterval = null;
     let routeHistory = {};
     let votesWereZero = true;
+    let hasVoted = false;
+    let fixedHeading = 0;
+    let fixedPitch = 0;
+
     window.onload = () => {
       Telegram.WebApp.ready();
       initApp();
@@ -244,45 +255,60 @@
       });
     }
 
+    function lockCamera() {
+      // Фиксировать POV всегда вперёд
+      panorama.addListener('pov_changed', function () {
+        let pov = panorama.getPov();
+        if (Math.abs(pov.heading - fixedHeading) > 1 || Math.abs(pov.pitch - fixedPitch) > 1) {
+          panorama.setPov({ heading: fixedHeading, pitch: fixedPitch });
+        }
+      });
+    }
+
     function setStreetViewTo(lat, lng, heading = 0) {
       let svService = new google.maps.StreetViewService();
       svService.getPanorama({ location: { lat, lng }, radius: 100 }, function(data, status) {
         if (status === google.maps.StreetViewStatus.OK) {
           panorama.setPano(data.location.pano);
-          panorama.setPov({ heading: heading, pitch: 0 });
+          fixedHeading = heading;
+          fixedPitch = 0;
+          panorama.setPov({ heading: fixedHeading, pitch: fixedPitch });
           panorama.setVisible(true);
+          setTimeout(lockCamera, 500);
         } else {
           panorama.setVisible(false);
         }
       });
     }
 
+    function updateVoteButtons() {
+      document.querySelectorAll('.btn-vote').forEach(btn => {
+        btn.disabled = hasVoted;
+        btn.classList.toggle('disabled', hasVoted);
+      });
+    }
+
     async function initApp() {
-      // Создаем панораму с временной стартовой позицией (она поменяется после getLastPosition)
       panorama = new google.maps.StreetViewPanorama(
         document.getElementById('street-view'),
         {
           position: CITIES[selectedCity],
           pov: { heading: 0, pitch: 0 },
           visible: false,
+          disableDefaultUI: false,   // ВКЛЮЧЕНЫ ВСЕ КОНТРОЛЫ!
+          panControl: true,
+          zoomControl: true,
+          linksControl: true,
           addressControl: false,
-          linksControl: false,
-          panControl: false,
-          zoomControl: false,
-          enableCloseButton: false,
           showRoadLabels: false,
-          disableDefaultUI: true
+          enableCloseButton: false,
         }
       );
-      panorama.setOptions({
-        disableDefaultUI: true,
-        linksControl: false,
-        panControl: false,
-        zoomControl: false,
-        addressControl: false,
-        showRoadLabels: false,
-        enableCloseButton: false,
-      });
+
+      // Блокируем любые переходы по клику/даблклику (движение только по голосованию!)
+      const svDiv = document.getElementById('street-view');
+      svDiv.addEventListener('click', e => e.preventDefault(), true);
+      svDiv.addEventListener('dblclick', e => e.preventDefault(), true);
 
       let lastPos = await getLastPosition(selectedCity);
       let startPos = lastPos ? { lat: lastPos.lat, lng: lastPos.lng } : CITIES[selectedCity];
@@ -320,6 +346,9 @@
       setInterval(drawRouteOnMap, 3000);
       updateVotes();
       drawRouteOnMap();
+      // Проверяем, голосовал ли пользователь:
+      hasVoted = !!localStorage.getItem(`voted_${selectedCity}`);
+      updateVoteButtons();
     }
 
     async function syncCity(city) {
@@ -333,6 +362,8 @@
       updateVotes();
       resetTimer();
       votesWereZero = true;
+      hasVoted = !!localStorage.getItem(`voted_${city}`);
+      updateVoteButtons();
     }
 
     async function updateVotes() {
@@ -358,6 +389,7 @@
     }
 
     async function castVote(dir) {
+      if (hasVoted) return;
       await fetch(`${BASE_URL}/functions/v1/cast_vote-ts`, {
         method: "POST",
         headers: {
@@ -367,6 +399,9 @@
         },
         body: JSON.stringify({ city: selectedCity, mode: "voting", direction: dir })
       });
+      hasVoted = true;
+      localStorage.setItem(`voted_${selectedCity}`, "1");
+      updateVoteButtons();
       updateVotes();
     }
 
@@ -408,8 +443,11 @@
         if (status === google.maps.StreetViewStatus.OK) {
           const nextLatLng = data.location.latLng;
           panorama.setPano(data.location.pano);
-          panorama.setPov({ heading: bestLink.heading, pitch: 0 });
+          fixedHeading = bestLink.heading;
+          fixedPitch = 0;
+          panorama.setPov({ heading: fixedHeading, pitch: fixedPitch });
           panorama.setVisible(true);
+          setTimeout(lockCamera, 500);
           if (!routeHistory[selectedCity]) routeHistory[selectedCity] = [];
           routeHistory[selectedCity].push({ lat: nextLatLng.lat(), lng: nextLatLng.lng() });
           drawRouteOnMap();
@@ -424,6 +462,10 @@
         },
         body: JSON.stringify({ count: 0 })
       });
+      // Сброс голосования:
+      hasVoted = false;
+      localStorage.removeItem(`voted_${selectedCity}`);
+      updateVoteButtons();
       updateVotes();
     }
 
@@ -455,6 +497,9 @@
         },
         body: JSON.stringify({ count: 0 })
       });
+      hasVoted = false;
+      localStorage.removeItem(`voted_${city}`);
+      updateVoteButtons();
       updateVotes();
     }
 
