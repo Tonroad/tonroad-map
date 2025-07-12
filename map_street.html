@@ -219,18 +219,21 @@
           zoomControl: false,
           enableCloseButton: false,
           showRoadLabels: false,
-          disableDefaultUI: true
+          disableDefaultUI: true,
+          clickToGo: false,       // <--- добавлено
+          scrollwheel: false,     // <--- добавлено
+          motionTracking: false   // <--- добавлено
         }
       );
-      panorama.setOptions({
-        disableDefaultUI: true,
-        linksControl: false,
-        panControl: false,
-        zoomControl: false,
-        addressControl: false,
-        showRoadLabels: false,
-        enableCloseButton: false,
-      });
+      // --- Жёсткая блокировка касаний, свайпов, мышиных движений ---
+      const streetViewDiv = document.getElementById('street-view');
+      ["touchstart", "touchmove", "touchend", "mousedown", "mousemove", "mouseup", "wheel"].forEach(event =>
+        streetViewDiv.addEventListener(event, e => {
+          e.stopPropagation();
+          e.preventDefault();
+          return false;
+        }, { passive: false })
+      ); // <--- добавлено
 
       mapPopup = new google.maps.Map(document.getElementById('mapCanvas'), {
         center: CITIES[selectedCity], zoom: 14
@@ -426,3 +429,4 @@
   </script>
 </body>
 </html>
+
