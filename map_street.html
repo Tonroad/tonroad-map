@@ -40,16 +40,26 @@
     }
     #topPanel { flex-shrink: 0;}
     #timerLabel {
+      min-height: 25px; /* фиксируем высоту панели таймера! */
       font-size: 13px; background: #1b242f; color: #19e074;
       border-radius: 6px; padding: 4px 0; margin: 2px 8vw 0 8vw;
       text-align: center; font-weight: bold; box-shadow: 0 1px 8px rgba(34,43,56,.10);
       letter-spacing: 1px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s;
+      user-select: none;
+    }
+    #timerLabel.active {
+      opacity: 1;
+      pointer-events: auto;
     }
     #main-content {
       flex: 1 1 auto; display: flex; flex-direction: column;
       min-height: 0; min-width: 0;
       overflow: hidden;
       position: relative;
+      height: 100%;
     }
     #street-view {
       width: 100vw;
@@ -60,6 +70,7 @@
       background: #263544;
       box-shadow: 0 1px 8px rgba(0,0,0,.07) inset;
       z-index: 1;
+      position: relative;
     }
     #controls {
       width: 100vw;
@@ -152,7 +163,7 @@
       <span id="voteResults">Влево: 0 | ↑: 0 | Вправо: 0</span>
     </div>
     <div id="topPanel">
-      <div id="timerLabel" style="display:none"></div>
+      <div id="timerLabel"></div>
     </div>
     <div id="main-content">
       <div id="street-view"></div>
@@ -177,7 +188,6 @@
     </div>
   </div>
   <script>
-    // === логика без изменений ===
     const API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzZGFvb3h5d3pubG9vZ3loZXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMDAyMzIsImV4cCI6MjA2NzU3NjIzMn0.t2wjdhhV_RfaB3aVQqDai546h5xNNBZpEu_lnrkL8Do";
     const BASE_URL = "https://qsdaooxywznloogyheyu.supabase.co";
     const CITIES = {
@@ -197,7 +207,6 @@
       initApp();
     };
     async function initApp() {
-      // === ВОТ ЭТОТ БЛОК ИЗМЕНЁН! ===
       panorama = new google.maps.StreetViewPanorama(
         document.getElementById('street-view'),
         {
@@ -213,7 +222,6 @@
           disableDefaultUI: true
         }
       );
-      // Ещё раз явно (для некоторых версий/устройств)
       panorama.setOptions({
         disableDefaultUI: true,
         linksControl: false,
@@ -291,11 +299,12 @@
     function startTimer() {
       timerValue = 5;
       timerActive = true;
-      document.getElementById('timerLabel').style.display = "";
-      document.getElementById('timerLabel').textContent = `Поедем через: ${timerValue} сек`;
+      const t = document.getElementById('timerLabel');
+      t.classList.add('active');
+      t.textContent = `Поедем через: ${timerValue} сек`;
       timerInterval = setInterval(() => {
         timerValue--;
-        document.getElementById('timerLabel').textContent = `Поедем через: ${timerValue} сек`;
+        t.textContent = `Поедем через: ${timerValue} сек`;
         if (timerValue <= 0) {
           drive();
         }
@@ -305,7 +314,7 @@
       if (timerInterval) clearInterval(timerInterval);
       timerActive = false;
       timerValue = 0;
-      document.getElementById('timerLabel').style.display = "none";
+      document.getElementById('timerLabel').classList.remove('active');
     }
     async function drive() {
       resetTimer();
@@ -384,3 +393,4 @@
   </script>
 </body>
 </html>
+
