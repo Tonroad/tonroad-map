@@ -379,46 +379,51 @@
     }
 
     async function drive() {
-      resetTimer();
-      let maxDir = Object.keys(votes).reduce((a, b) => votes[a] > votes[b] ? a : b);
-      if (votes[maxDir] === 0) return;
-      let bestLink;
-      try {
-        bestLink = findBestLink(maxDir);
-      } catch {
-        alert("Нет подходящего направления для движения!");
-        return;
-      }
-      let svService = new google.maps.StreetViewService();
-      svService.getPanorama({ pano: bestLink.pano }, async (data, status) => {
-        if (status === google.maps.StreetViewStatus.OK) {
-          const nextLatLng = data.location.latLng;
-          panorama.setPosition(nextLatLng);
-          panorama.setPov({ heading: bestLink.heading, pitch: 0 });
-          if (!routeHistory[selectedCity]) routeHistory[selectedCity] = [];
-          routeHistory[selectedCity].push({ lat: nextLatLng.lat(), lng: nextLatLng.lng() });
-          drawRouteOnMap();
-          // Сохраняем новую позицию!
-          await saveCurrentPositionToSupabase(
-            selectedCity,
-            nextLatLng.lat(),
-            nextLatLng.lng(),
-            bestLink.heading
-          );
-        }
-      });
-      await fetch(`${BASE_URL}/rest/v1/votes_summary?city=eq.${selectedCity}&mode=eq.voting`, {
-        method: "PATCH",
-        headers: {
-          apikey: API_KEY,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ count: 0 })
-      });
-      localStorage.removeItem("voted_" + selectedCity);
-      setVoteButtonsDisabled(false);
-      updateVotes();
+  resetTimer();
+  let maxDir = Object.keys(votes).reduce((a, b) => votes[a] > votes[b] ? a : b);
+  if (votes[maxDir] === 0) return;
+  let bestLink;
+  try {
+    bestLink = findBestLink(maxDir);
+  } catch {
+    alert("Нет подходящего направления для движения!");
+    return;
+  }
+  let svService = new google.maps.StreetViewService();
+  svService.getPanorama({ pano: bestLink.pano }, async (data, status) => {
+    if (status === google.maps.StreetViewStatus.OK) {
+      const nextLatLng = data.location.latLng;
+      // Сначала только позиция, POV не трогаем!
+      panorama.setPosition(nextLatLng);
+      setTimeout(() => {
+        // Через 400мс только затем плавно меняем POV (heading)
+        panorama.setPov({ heading: bestLink.heading, pitch: 0 });
+      }, 400);
+
+      if (!routeHistory[selectedCity]) routeHistory[selectedCity] = [];
+      routeHistory[selectedCity].push({ lat: nextLatLng.lat(), lng: nextLatLng.lng() });
+      drawRouteOnMap();
+      await saveCurrentPositionToSupabase(
+        selectedCity,
+        nextLatLng.lat(),
+        nextLatLng.lng(),
+        bestLink.heading
+      );
     }
+  });
+  await fetch(`${BASE_URL}/rest/v1/votes_summary?city=eq.${selectedCity}&mode=eq.voting`, {
+    method: "PATCH",
+    headers: {
+      apikey: API_KEY,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ count: 0 })
+  });
+  localStorage.removeItem("voted_" + selectedCity);
+  setVoteButtonsDisabled(false);
+  updateVotes();
+}
+
 
     function findBestLink(dir) {
       const pov = panorama.getPov().heading;
