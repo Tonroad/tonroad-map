@@ -192,7 +192,6 @@
     let timerValue = 0, timerActive = false, timerInterval = null;
     let routeHistory = {};
 
-    // --- Блокировка кнопок голосования ---
     function setVoteButtonsDisabled(disabled) {
       document.querySelectorAll('.btn-vote').forEach(btn => {
         btn.disabled = disabled;
@@ -206,12 +205,50 @@
       initApp();
     };
 
+    async function getCurrentPositionFromSupabase(city) {
+      const url = `${BASE_URL}/rest/v1/current_position?city=eq.${city}&select=lat,lng,heading&order=updated_at.desc&limit=1`;
+      const res = await fetch(url, { headers: { apikey: API_KEY } });
+      const data = await res.json();
+      if (data && data.length) {
+        return {
+          lat: data[0].lat,
+          lng: data[0].lng,
+          heading: data[0].heading || 0
+        };
+      }
+      return null;
+    }
+
+    async function saveCurrentPositionToSupabase(city, lat, lng, heading) {
+      await fetch(`${BASE_URL}/rest/v1/current_position`, {
+        method: "POST",
+        headers: {
+          apikey: API_KEY,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${API_KEY}`
+        },
+        body: JSON.stringify({
+          city: city,
+          lat: lat,
+          lng: lng,
+          heading: heading,
+          updated_at: new Date().toISOString()
+        })
+      });
+    }
+
     async function initApp() {
+      let lastPosition = await getCurrentPositionFromSupabase(selectedCity);
+      let startPos = lastPosition
+        ? { lat: lastPosition.lat, lng: lastPosition.lng }
+        : CITIES[selectedCity];
+      let startHeading = lastPosition ? lastPosition.heading : 0;
+
       panorama = new google.maps.StreetViewPanorama(
         document.getElementById('street-view'),
         {
-          position: CITIES[selectedCity],
-          pov: { heading: 0, pitch: 0 },
+          position: startPos,
+          pov: { heading: startHeading, pitch: 0 },
           visible: true,
           addressControl: false,
           linksControl: false,
@@ -220,12 +257,12 @@
           enableCloseButton: false,
           showRoadLabels: false,
           disableDefaultUI: true,
-          clickToGo: false,       // <--- добавлено
-          scrollwheel: false,     // <--- добавлено
-          motionTracking: false   // <--- добавлено
+          clickToGo: false,
+          scrollwheel: false,
+          motionTracking: false
         }
       );
-      // --- Жёсткая блокировка касаний, свайпов, мышиных движений ---
+      // Блокировка любых свайпов, drag, прокрутки — управление только кнопками!
       const streetViewDiv = document.getElementById('street-view');
       ["touchstart", "touchmove", "touchend", "mousedown", "mousemove", "mouseup", "wheel"].forEach(event =>
         streetViewDiv.addEventListener(event, e => {
@@ -233,27 +270,27 @@
           e.preventDefault();
           return false;
         }, { passive: false })
-      ); // <--- добавлено
+      );
 
       mapPopup = new google.maps.Map(document.getElementById('mapCanvas'), {
-        center: CITIES[selectedCity], zoom: 14
+        center: startPos, zoom: 14
       });
       mapRoutePath = new google.maps.Polyline({
-        path: [CITIES[selectedCity]],
+        path: [startPos],
         geodesic: true,
         strokeColor: "#f90",
         strokeOpacity: 1.0,
         strokeWeight: 3
       });
       mapRoutePath.setMap(mapPopup);
-      routeHistory[selectedCity] = [CITIES[selectedCity]];
-      syncCity(selectedCity);
+      routeHistory[selectedCity] = [startPos];
+      syncCity(selectedCity, startPos, startHeading);
       document.querySelector('.btn-main.map').onclick = showMapPopup;
       document.getElementById('hideMapBtn').onclick = hideMapPopup;
       document.getElementById('citySelect').onchange = function(e) {
         selectedCity = e.target.value;
         localStorage.setItem("selectedCity", selectedCity);
-        syncCity(selectedCity);
+        initApp(); // чтобы каждый раз брать актуальную позицию
       };
       document.querySelectorAll('.btn-vote').forEach(btn =>
         btn.onclick = () => castVote(btn.dataset.dir)
@@ -268,7 +305,6 @@
       updateVotes();
       drawRouteOnMap();
 
-      // Проверяем, не голосовал ли уже пользователь в этом городе
       if (localStorage.getItem("voted_" + selectedCity) === "1") {
         setVoteButtonsDisabled(true);
       } else {
@@ -276,14 +312,16 @@
       }
     }
 
-    function syncCity(city) {
-      if (panorama) panorama.setPosition(CITIES[city]);
-      if (mapPopup) mapPopup.setCenter(CITIES[city]);
-      routeHistory[city] = [CITIES[city]];
-      mapRoutePath.setPath([CITIES[city]]);
+    function syncCity(city, startPos, startHeading) {
+      if (panorama) {
+        panorama.setPosition(startPos || CITIES[city]);
+        panorama.setPov({ heading: startHeading || 0, pitch: 0 });
+      }
+      if (mapPopup) mapPopup.setCenter(startPos || CITIES[city]);
+      routeHistory[city] = [startPos || CITIES[city]];
+      mapRoutePath.setPath([startPos || CITIES[city]]);
       updateVotes();
       resetTimer();
-      // Тоже проверяем состояние голосования
       if (localStorage.getItem("voted_" + city) === "1") {
         setVoteButtonsDisabled(true);
       } else {
@@ -304,7 +342,6 @@
     }
 
     async function castVote(dir) {
-      // Блокируем повторное голосование
       if (localStorage.getItem("voted_" + selectedCity) === "1") return;
       await fetch(`${BASE_URL}/functions/v1/cast_vote-ts`, {
         method: "POST",
@@ -353,7 +390,7 @@
         return;
       }
       let svService = new google.maps.StreetViewService();
-      svService.getPanorama({ pano: bestLink.pano }, (data, status) => {
+      svService.getPanorama({ pano: bestLink.pano }, async (data, status) => {
         if (status === google.maps.StreetViewStatus.OK) {
           const nextLatLng = data.location.latLng;
           panorama.setPosition(nextLatLng);
@@ -361,6 +398,13 @@
           if (!routeHistory[selectedCity]) routeHistory[selectedCity] = [];
           routeHistory[selectedCity].push({ lat: nextLatLng.lat(), lng: nextLatLng.lng() });
           drawRouteOnMap();
+          // Сохраняем новую позицию!
+          await saveCurrentPositionToSupabase(
+            selectedCity,
+            nextLatLng.lat(),
+            nextLatLng.lng(),
+            bestLink.heading
+          );
         }
       });
       await fetch(`${BASE_URL}/rest/v1/votes_summary?city=eq.${selectedCity}&mode=eq.voting`, {
@@ -371,7 +415,6 @@
         },
         body: JSON.stringify({ count: 0 })
       });
-      // После движения — разблокируем кнопки голосования
       localStorage.removeItem("voted_" + selectedCity);
       setVoteButtonsDisabled(false);
       updateVotes();
@@ -405,7 +448,13 @@
         },
         body: JSON.stringify({ count: 0 })
       });
-      // После сброса — разблокируем кнопки голосования
+      // Сохраняем стартовую позицию!
+      await saveCurrentPositionToSupabase(
+        city,
+        CITIES[city].lat,
+        CITIES[city].lng,
+        0
+      );
       localStorage.removeItem("voted_" + city);
       setVoteButtonsDisabled(false);
       updateVotes();
