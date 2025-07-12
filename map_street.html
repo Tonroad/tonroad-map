@@ -72,7 +72,6 @@
       z-index: 1;
       position: relative;
     }
-    /* Слой для блокировки управления тачем/мышью */
     #block-touch {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
@@ -214,16 +213,47 @@
     let timerValue = 0, timerActive = false, timerInterval = null;
     let routeHistory = {};
     let votesWereZero = true;
+
     window.onload = () => {
       Telegram.WebApp.ready();
       initApp();
     };
+
+    async function getLastPosition(city) {
+      const resp = await fetch(`${BASE_URL}/rest/v1/current_position?city=eq.${city}&select=lat,lng,heading&limit=1`, {
+        headers: { apikey: API_KEY }
+      });
+      const data = await resp.json();
+      if (data && data.length) {
+        return {
+          lat: data[0].lat,
+          lng: data[0].lng,
+          heading: data[0].heading || 0
+        };
+      }
+      return null;
+    }
+
+    async function setLastPosition(city, lat, lng, heading) {
+      await fetch(`${BASE_URL}/rest/v1/current_position?city=eq.${city}`, {
+        method: "PATCH",
+        headers: {
+          apikey: API_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ lat: lat, lng: lng, heading: heading })
+      });
+    }
+
     async function initApp() {
+      let lastPos = await getLastPosition(selectedCity);
+      let startPos = lastPos ? { lat: lastPos.lat, lng: lastPos.lng } : CITIES[selectedCity];
+      let startHeading = lastPos ? lastPos.heading : 0;
       panorama = new google.maps.StreetViewPanorama(
         document.getElementById('street-view'),
         {
-          position: CITIES[selectedCity],
-          pov: { heading: 0, pitch: 0 },
+          position: startPos,
+          pov: { heading: startHeading, pitch: 0 },
           visible: true,
           addressControl: false,
           linksControl: false,
@@ -245,24 +275,24 @@
       });
 
       mapPopup = new google.maps.Map(document.getElementById('mapCanvas'), {
-        center: CITIES[selectedCity], zoom: 14
+        center: startPos, zoom: 14
       });
       mapRoutePath = new google.maps.Polyline({
-        path: [CITIES[selectedCity]],
+        path: [startPos],
         geodesic: true,
         strokeColor: "#f90",
         strokeOpacity: 1.0,
         strokeWeight: 3
       });
       mapRoutePath.setMap(mapPopup);
-      routeHistory[selectedCity] = [CITIES[selectedCity]];
+      routeHistory[selectedCity] = [startPos];
       syncCity(selectedCity);
       document.querySelector('.btn-main.map').onclick = showMapPopup;
       document.getElementById('hideMapBtn').onclick = hideMapPopup;
-      document.getElementById('citySelect').onchange = function(e) {
+      document.getElementById('citySelect').onchange = async function(e) {
         selectedCity = e.target.value;
         localStorage.setItem("selectedCity", selectedCity);
-        syncCity(selectedCity);
+        await syncCity(selectedCity);
       };
       document.querySelectorAll('.btn-vote').forEach(btn =>
         btn.onclick = () => castVote(btn.dataset.dir)
@@ -276,15 +306,23 @@
       updateVotes();
       drawRouteOnMap();
     }
-    function syncCity(city) {
-      if (panorama) panorama.setPosition(CITIES[city]);
-      if (mapPopup) mapPopup.setCenter(CITIES[city]);
-      routeHistory[city] = [CITIES[city]];
-      mapRoutePath.setPath([CITIES[city]]);
+
+    async function syncCity(city) {
+      let lastPos = await getLastPosition(city);
+      let pos = lastPos ? { lat: lastPos.lat, lng: lastPos.lng } : CITIES[city];
+      let heading = lastPos ? lastPos.heading : 0;
+      if (panorama) {
+        panorama.setPosition(pos);
+        panorama.setPov({ heading: heading, pitch: 0 });
+      }
+      if (mapPopup) mapPopup.setCenter(pos);
+      routeHistory[city] = [pos];
+      mapRoutePath.setPath([pos]);
       updateVotes();
       resetTimer();
       votesWereZero = true;
     }
+
     async function updateVotes() {
       const url = `${BASE_URL}/rest/v1/votes_summary?select=direction,count&city=eq.${selectedCity}&mode=eq.voting`;
       const res = await fetch(url, { headers: { apikey: API_KEY } });
@@ -296,6 +334,7 @@
         total += v.count;
       });
       document.getElementById("voteResults").textContent =
+        `Влево: ${votes.left} | ↑
         `Влево: ${votes.left} | ↑: ${votes.straight} | Вправо: ${votes.right}`;
       if (total > 0 && votesWereZero && !timerActive) {
         startTimer();
@@ -306,6 +345,7 @@
         resetTimer();
       }
     }
+
     async function castVote(dir) {
       await fetch(`${BASE_URL}/functions/v1/cast_vote-ts`, {
         method: "POST",
@@ -318,6 +358,7 @@
       });
       updateVotes();
     }
+
     function startTimer() {
       timerValue = 5;
       timerActive = true;
@@ -332,12 +373,14 @@
         }
       }, 1000);
     }
+
     function resetTimer() {
       if (timerInterval) clearInterval(timerInterval);
       timerActive = false;
       timerValue = 0;
       document.getElementById('timerLabel').classList.remove('active');
     }
+
     async function drive() {
       resetTimer();
       let maxDir = Object.keys(votes).reduce((a, b) => votes[a] > votes[b] ? a : b);
@@ -350,7 +393,7 @@
         return;
       }
       let svService = new google.maps.StreetViewService();
-      svService.getPanorama({ pano: bestLink.pano }, (data, status) => {
+      svService.getPanorama({ pano: bestLink.pano }, async (data, status) => {
         if (status === google.maps.StreetViewStatus.OK) {
           const nextLatLng = data.location.latLng;
           panorama.setPosition(nextLatLng);
@@ -358,6 +401,8 @@
           if (!routeHistory[selectedCity]) routeHistory[selectedCity] = [];
           routeHistory[selectedCity].push({ lat: nextLatLng.lat(), lng: nextLatLng.lng() });
           drawRouteOnMap();
+          // Сохраняем новую позицию в Supabase
+          await setLastPosition(selectedCity, nextLatLng.lat(), nextLatLng.lng(), bestLink.heading);
         }
       });
       await fetch(`${BASE_URL}/rest/v1/votes_summary?city=eq.${selectedCity}&mode=eq.voting`, {
@@ -370,6 +415,7 @@
       });
       updateVotes();
     }
+
     function findBestLink(dir) {
       const pov = panorama.getPov().heading;
       const links = panorama.getLinks() || [];
@@ -384,11 +430,14 @@
       if (!best.link) throw new Error('Нет подходящего поворота');
       return best.link;
     }
+
     async function resetToStart(city) {
       panorama.setPosition(CITIES[city]);
       panorama.setPov({ heading: 0, pitch: 0 });
       routeHistory[city] = [CITIES[city]];
       mapRoutePath.setPath([CITIES[city]]);
+      // Сохраняем стартовую позицию в Supabase
+      await setLastPosition(city, CITIES[city].lat, CITIES[city].lng, 0);
       await fetch(`${BASE_URL}/rest/v1/votes_summary?city=eq.${city}&mode=eq.voting`, {
         method: "PATCH",
         headers: {
@@ -399,20 +448,22 @@
       });
       updateVotes();
     }
+
     function drawRouteOnMap() {
       if (!routeHistory[selectedCity]) return;
       mapRoutePath.setPath(routeHistory[selectedCity]);
       mapPopup.setCenter(routeHistory[selectedCity][routeHistory[selectedCity].length - 1]);
     }
+
     function showMapPopup() {
       document.getElementById("mapPopup").style.display = "flex";
       mapPopup.setCenter(routeHistory[selectedCity][routeHistory[selectedCity].length - 1]);
       google.maps.event.trigger(mapPopup, 'resize');
     }
+
     function hideMapPopup() {
       document.getElementById("mapPopup").style.display = "none";
     }
   </script>
 </body>
 </html>
-
