@@ -40,7 +40,7 @@
     }
     #topPanel { flex-shrink: 0;}
     #timerLabel {
-      min-height: 25px;
+      min-height: 25px; /* фиксируем высоту панели таймера! */
       font-size: 13px; background: #1b242f; color: #19e074;
       border-radius: 6px; padding: 4px 0; margin: 2px 8vw 0 8vw;
       text-align: center; font-weight: bold; box-shadow: 0 1px 8px rgba(34,43,56,.10);
@@ -251,7 +251,6 @@
         selectedCity = e.target.value;
         localStorage.setItem("selectedCity", selectedCity);
         syncCity(selectedCity);
-        checkVoteBlock();
       };
       document.querySelectorAll('.btn-vote').forEach(btn =>
         btn.onclick = () => castVote(btn.dataset.dir)
@@ -265,7 +264,6 @@
       setInterval(drawRouteOnMap, 3000);
       updateVotes();
       drawRouteOnMap();
-      checkVoteBlock(); // Проверка при старте
     }
     function syncCity(city) {
       if (panorama) panorama.setPosition(CITIES[city]);
@@ -286,16 +284,7 @@
       const total = votes.left + votes.straight + votes.right;
       if (total > 0 && !timerActive) startTimer();
     }
-    // --- блокировка голосования ---
-    function setVoteButtonsDisabled(disabled) {
-      document.querySelectorAll('.btn-vote').forEach(btn => btn.disabled = disabled);
-    }
-    function checkVoteBlock() {
-      const disabled = localStorage.getItem("voted_" + selectedCity) === "1";
-      setVoteButtonsDisabled(disabled);
-    }
     async function castVote(dir) {
-      if (localStorage.getItem("voted_" + selectedCity) === "1") return;
       await fetch(`${BASE_URL}/functions/v1/cast_vote-ts`, {
         method: "POST",
         headers: {
@@ -305,11 +294,8 @@
         },
         body: JSON.stringify({ city: selectedCity, mode: "voting", direction: dir })
       });
-      localStorage.setItem("voted_" + selectedCity, "1");
-      setVoteButtonsDisabled(true);
       updateVotes();
     }
-    // --- конец блока ---
     function startTimer() {
       timerValue = 5;
       timerActive = true;
@@ -360,8 +346,6 @@
         },
         body: JSON.stringify({ count: 0 })
       });
-      localStorage.removeItem("voted_" + selectedCity);
-      setVoteButtonsDisabled(false);
       updateVotes();
     }
     function findBestLink(dir) {
